@@ -62,17 +62,15 @@ class LLMProcessor:
         for i, news in enumerate(news_list, 1):
             news_input += f"[{i}] {news['title']}\n{news['summary'][:200]}\n\n"
 
+        current_theme = db.get_theme()
+        
         prompt = f"""Ты — главный редактор крупного технологического медиа.
 
 ЗАДАНИЕ:
 Ниже список из {len(news_list)} новостей. Выбери ОДНУ самую важную и напиши по ней аналитическую статью.
 
 ПРИОРИТЕТ ВЫБОРА (от высшего к низшему):
-1. Релизы новых AI-моделей (скорость, цена, архитектура)
-2. Прорывы в AI, которые меняют правила игры (disruptive tech)
-3. Крупные запуски и скрытые мотивы корпораций (интрига рынка)
-4. Регулирование AI, угрозы безопасности, AGI
-5. Прочие важные технологические тренды
+{current_theme}
 
 СТИЛЬ И ПОДАЧА (КРИТИЧНО):
 - Пиши с тонкой журналистской интригой. Текст должен затягивать с первого предложения.
@@ -138,6 +136,17 @@ class LLMProcessor:
                     article_lines.append(line)
 
             article_text = "\n".join(article_lines).strip()
+            
+            # Конвертируем случайный маркдаун в HTML
+            article_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', article_text)
+            article_text = re.sub(r'\*(.*?)\*', r'<i>\1</i>', article_text)
+            
+            # Гарантированно делаем первую строку (заголовок) жирной, если она еще не жирная
+            if article_text:
+                blocks = article_text.split('\n\n')
+                if blocks and not blocks[0].startswith("<b>"):
+                    blocks[0] = f"<b>{blocks[0]}</b>"
+                article_text = "\n\n".join(blocks)
 
             # Фоллбэк: если модель не указала номер, берём первую новость
             if not selected_news and news_list:

@@ -100,11 +100,13 @@ async def generate_and_moderate():
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
 
+        final_text = article_text[:3800]
+        if len(article_text) > 3800:
+            final_text += "..."
+
         # Добавляем ссылку на источник
         if source_link:
-            article_text += f'\n\n🔗 <a href="{source_link}">Источник</a>'
-
-        final_text = article_text[:4000]
+            final_text += f'\n\n🔗 <a href="{source_link}">Источник</a>'
 
         # Отправляем админу с кнопками модерации
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -223,6 +225,59 @@ async def cmd_start(message: types.Message):
     )
 
 
+@dp.message(Command("theme"))
+async def cmd_theme(message: types.Message):
+    current_theme = db.get_theme()
+    await message.answer(f"🧠 <b>Текущие приоритеты (Тема):</b>\n\n{current_theme}")
+
+
+@dp.message(Command("set_theme"))
+async def cmd_set_theme(message: types.Message):
+    new_theme = message.text.replace("/set_theme", "").strip()
+    if not new_theme:
+        await message.answer("Укажи новую тему. Пример:\n/set_theme Хочу новости только про крипту", parse_mode=None)
+        return
+    db.set_theme(new_theme)
+    await message.answer("✅ Тема успешно обновлена! Нейросеть будет опираться на неё.")
+
+
+@dp.message(Command("sources"))
+async def cmd_sources(message: types.Message):
+    sources = db.get_all_sources()
+    if not sources:
+        await message.answer("📭 Список источников пуст.")
+        return
+    text = "📡 <b>Источники RSS:</b>\n\n"
+    for sid, url in sources:
+        text += f"ID: {sid} | <code>{url}</code>\n"
+    await message.answer(text)
+
+
+@dp.message(Command("add_source"))
+async def cmd_add_source(message: types.Message):
+    url = message.text.replace("/add_source", "").strip()
+    if not url.startswith("http"):
+        await message.answer("Укажи валидный URL. Пример:\n/add_source https://test.com/rss", parse_mode=None)
+        return
+    
+    if db.add_source(url):
+        await message.answer(f"✅ Успешно добавлен источник:\n{url}")
+    else:
+        await message.answer("❌ Этот источник уже есть в базе!")
+
+
+@dp.message(Command("del_source"))
+async def cmd_del_source(message: types.Message):
+    try:
+        sid = int(message.text.replace("/del_source", "").strip())
+        if db.remove_source(sid):
+            await message.answer(f"🗑 Источник с ID {sid} удален.")
+        else:
+            await message.answer(f"❌ Источник с ID {sid} не найден.")
+    except ValueError:
+        await message.answer("Укажи числовой ID. Пример:\n/del_source 5", parse_mode=None)
+
+
 @dp.message(Command("news"))
 @dp.message(F.text == "🔍 AI-новость дня")
 @dp.message(F.text == "Найти свежую новость")
@@ -253,10 +308,12 @@ async def cmd_news(message: types.Message):
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
 
-        if source_link:
-            article_text += f'\n\n🔗 <a href="{source_link}">Источник</a>'
+        final_text = article_text[:3800]
+        if len(article_text) > 3800:
+            final_text += "..."
 
-        final_text = article_text[:4000]
+        if source_link:
+            final_text += f'\n\n🔗 <a href="{source_link}">Источник</a>'
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [

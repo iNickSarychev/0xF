@@ -15,8 +15,10 @@ class NewsFetcher:
         """
         all_news = []
         current_time = time.time()
+        
+        sources = [url for _, url in self.db.get_all_sources()]
 
-        for feed_url in config.RSS_FEEDS:
+        for feed_url in sources:
             try:
                 feed = feedparser.parse(feed_url)
                 for entry in feed.entries:

@@ -35,9 +35,10 @@
    pip install -r requirements.txt
    ```
 
-3. **Установите [Ollama](https://ollama.com/)** и загрузите модель (gemma4 или phi4):
+3. **Установите [Ollama](https://ollama.com/)** и загрузите модель (gemma4 или phi4) и векторную модель `nomic-embed-text`:
    ```bash
    ollama pull gemma4
+   ollama pull nomic-embed-text
    ```
 
 4. **Настройте переменные окружения:**
@@ -56,6 +57,18 @@
    start_bot.bat
    ```
 
+## 🎮 Администрирование через Telegram
+Бот поддерживает прямое управление параметрами из интерфейса Telegram для Администратора:
+
+- **RSS Источники:**
+  - `/sources` — Показать все текущие активные RSS-ленты
+  - `/add_source [URL]` — Добавить новую ленту
+  - `/del_source [ID]` — Удалить ленту по ID
+
+- **Фокус-тема нейросети:**
+  - `/theme` — Узнать текущую тему генерации
+  - `/set_theme [текст]` — Указать нейросети главный приоритет. Например: `/set_theme Ищи только новости про новые LLM и OpenSource`
+
 ## 🧠 Архитектура
 - `main.py` — Точка входа, Middleware для защиты (Admin_only), клавиатуры и Scheduler.
 - `database.py` — Управление SQLite.
@@ -64,4 +77,5 @@
 - `services/llm_processor.py` — Логика взаимодействия с Ollama API (включая очистку от тегов размышлений `think` `thought`).
 
 ## 👨‍💻 Разработчик
+NickSarychev
 Создано специально для канала 0xFUTURE.
