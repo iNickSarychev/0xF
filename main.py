@@ -62,8 +62,8 @@ async def auto_publish(message_id: int):
     await asyncio.sleep(600)  # 10 минут
 
     if message_id in pending_articles:
-        article_text = pending_articles.pop(message_id)
-        await publish_to_channel(article_text)
+        article_data = pending_articles.pop(message_id)
+        await publish_to_channel(article_data['text'])
 
         # Уведомляем админа
         try:
@@ -89,15 +89,16 @@ async def generate_and_moderate():
             logger.info("No fresh news found, skipping scheduled job.")
             return
 
-        article_text, source_link = await llm_processor.process_news_batch(
+        article_text, news_item = await llm_processor.process_news_batch(
             news_list
         )
 
-        # Сохраняем выбранную новость в базу
-        for news in news_list:
-            if news['link'] == source_link:
-                db.save_news(news['title'], news['link'])
-                break
+        if not news_item:
+            logger.info("News rejected by model or no news selected.")
+            return
+
+        source_link = news_item.get("link", "")
+        db.save_news(news_item['title'], source_link)
 
         # Добавляем ссылку на источник
         if source_link:
@@ -113,6 +114,11 @@ async def generate_and_moderate():
                 ),
                 InlineKeyboardButton(
                     text="❌ Отклонить", callback_data="reject"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎓 Отклонить (Обучить)", callback_data="reject_teach"
                 )
             ]
         ])
@@ -138,7 +144,7 @@ async def generate_and_moderate():
             )
 
         # Сохраняем статью и запускаем таймер автопубликации
-        pending_articles[sent_msg.message_id] = final_text
+        pending_articles[sent_msg.message_id] = {'text': final_text, 'news_item': news_item}
         asyncio.create_task(auto_publish(sent_msg.message_id))
 
     except Exception as e:
@@ -153,8 +159,8 @@ async def on_approve(callback: types.CallbackQuery):
     message_id = callback.message.message_id
 
     if message_id in pending_articles:
-        article_text = pending_articles.pop(message_id)
-        await publish_to_channel(article_text)
+        article_data = pending_articles.pop(message_id)
+        await publish_to_channel(article_data['text'])
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.answer("✅ Опубликовано на канале!", show_alert=True)
     else:
@@ -170,6 +176,30 @@ async def on_reject(callback: types.CallbackQuery):
         pending_articles.pop(message_id)
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.answer("❌ Статья отклонена.", show_alert=True)
+    else:
+        await callback.answer("Эта статья уже обработана.", show_alert=True)
+
+
+@dp.callback_query(F.data == "reject_teach")
+async def on_reject_teach(callback: types.CallbackQuery):
+    """Админ отклонил с обучением — добавляем вектор в базу."""
+    message_id = callback.message.message_id
+
+    if message_id in pending_articles:
+        article_data = pending_articles.pop(message_id)
+        news_item = article_data['news_item']
+        
+        # Получаем вектор для обучения
+        text_for_emb = f"{news_item['title']}. {news_item['summary']}"
+        try:
+            emb_resp = await llm_processor.client.embeddings(model='nomic-embed-text', prompt=text_for_emb)
+            vector = emb_resp['embedding']
+            db.save_rejected_vector(text_for_emb[:200], vector)
+            await callback.answer("🎓 Модель успешно обучилась. Подобный смысл больше не появится в ленте!", show_alert=True)
+        except Exception as e:
+            await callback.answer(f"Ошибка обучения: {e}", show_alert=True)
+            
+        await callback.message.edit_reply_markup(reply_markup=None)
     else:
         await callback.answer("Эта статья уже обработана.", show_alert=True)
 
@@ -212,14 +242,16 @@ async def cmd_news(message: types.Message):
             f"🖊️ Найдено: {len(news_list)}. Генерирую статью..."
         )
 
-        article_text, source_link = await llm_processor.process_news_batch(
+        article_text, news_item = await llm_processor.process_news_batch(
             news_list
         )
 
-        for news in news_list:
-            if news['link'] == source_link:
-                db.save_news(news['title'], news['link'])
-                break
+        if not news_item:
+            await status_msg.edit_text("🤷 За последние 24 часа не нашлось значимых не отклоненных новостей.")
+            return
+
+        source_link = news_item.get("link", "")
+        db.save_news(news_item['title'], source_link)
 
         if source_link:
             article_text += f'\n\n🔗 <a href="{source_link}">Источник</a>'
@@ -230,6 +262,9 @@ async def cmd_news(message: types.Message):
             [
                 InlineKeyboardButton(text="✅ Опубликовать", callback_data="approve"),
                 InlineKeyboardButton(text="❌ Отклонить", callback_data="reject")
+            ],
+            [
+                InlineKeyboardButton(text="🎓 Отклонить (Обучить)", callback_data="reject_teach")
             ]
         ])
 
@@ -240,7 +275,7 @@ async def cmd_news(message: types.Message):
                 final_text, parse_mode=None, reply_markup=keyboard, request_timeout=60
             )
             
-        pending_articles[status_msg.message_id] = final_text
+        pending_articles[status_msg.message_id] = {'text': final_text, 'news_item': news_item}
 
     except Exception as e:
         logger.error(f"Error processing /news: {e}")

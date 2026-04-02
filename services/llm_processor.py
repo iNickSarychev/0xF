@@ -1,7 +1,9 @@
 import ollama
 import httpx
-from typing import List, Dict, Tuple
+import math
+from typing import List, Dict, Tuple, Any
 from config import config
+from database import db
 
 
 class LLMProcessor:
@@ -12,13 +14,50 @@ class LLMProcessor:
             timeout=httpx.Timeout(300.0, connect=10.0)
         )
 
+    def cosine_similarity(self, v1: List[float], v2: List[float]) -> float:
+        dot = sum(a * b for a, b in zip(v1, v2))
+        mag1 = math.sqrt(sum(a * a for a in v1))
+        mag2 = math.sqrt(sum(b * b for b in v2))
+        if mag1 * mag2 == 0:
+            return 0
+        return dot / (mag1 * mag2)
+
     async def process_news_batch(
         self, news_list: List[Dict[str, str]]
-    ) -> Tuple[str, str]:
+    ) -> Tuple[str, Any]:
         """
-        Принимает список новостей, выбирает ОДНУ и пишет лонгрид.
-        Возвращает (текст_статьи, ссылка_на_источник).
+        Принимает список новостей, векторами фильтрует отклоненные, 
+        выбирает ОДНУ и пишет лонгрид.
+        Возвращает (текст_статьи, selected_news).
         """
+        try:
+            rejected_data = db.get_all_rejected_vectors()
+            filtered_news = []
+            
+            for news in news_list:
+                text_for_emb = f"{news['title']}. {news['summary']}"
+                try:
+                    emb_resp = await self.client.embeddings(model='nomic-embed-text', prompt=text_for_emb)
+                    news_vector = emb_resp['embedding']
+                    
+                    is_rejected = False
+                    for _, rej_vec in rejected_data:
+                        sim = self.cosine_similarity(news_vector, rej_vec)
+                        if sim > 0.85:
+                            is_rejected = True
+                            break
+                    if not is_rejected:
+                        filtered_news.append(news)
+                except Exception:
+                    filtered_news.append(news)
+            
+            news_list = filtered_news
+            
+            if not news_list:
+                return "🤷 Все свежие новости были отфильтрованы как дубликаты или ранее отклонённые темы.", None
+        except Exception as e:
+            pass
+
         news_input = ""
         for i, news in enumerate(news_list, 1):
             news_input += f"[{i}] {news['title']}\n{news['summary'][:200]}\n\n"
@@ -82,7 +121,7 @@ class LLMProcessor:
             raw_text = raw_text.strip()
 
             # Извлекаем номер выбранной новости
-            selected_link = ""
+            selected_news = None
             article_lines = []
 
             for line in raw_text.split("\n"):
@@ -92,7 +131,7 @@ class LLMProcessor:
                         number_part = stripped.split(":")[1].strip().rstrip(".")
                         index = int(number_part) - 1
                         if 0 <= index < len(news_list):
-                            selected_link = news_list[index].get("link", "")
+                            selected_news = news_list[index]
                     except (ValueError, IndexError):
                         pass
                 else:
@@ -101,13 +140,13 @@ class LLMProcessor:
             article_text = "\n".join(article_lines).strip()
 
             # Фоллбэк: если модель не указала номер, берём первую новость
-            if not selected_link and news_list:
-                selected_link = news_list[0].get("link", "")
+            if not selected_news and news_list:
+                selected_news = news_list[0]
 
-            return article_text, selected_link
+            return article_text, selected_news
 
         except Exception as e:
-            return f"Ошибка при анализе нейросетью: {str(e)}", ""
+            return f"Ошибка при анализе нейросетью: {str(e)}", None
 
 
 llm_processor = LLMProcessor()
