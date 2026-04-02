@@ -83,6 +83,10 @@ async def auto_publish(message_id: int):
 async def generate_and_moderate():
     """Генерирует статью и отправляет админу на модерацию."""
     try:
+        if not await llm_processor.is_available():
+            logger.warning("Ollama is offline. Skipping scheduled generation.")
+            return
+
         news_list = news_fetcher.get_news_batch(max_count=15)
 
         if not news_list:
@@ -285,6 +289,13 @@ async def cmd_news(message: types.Message):
     status_msg = await message.answer("🔍 Сканирую AI и tech-источники...")
 
     try:
+        if not await llm_processor.is_available():
+            await status_msg.edit_text(
+                "🖥️ Ollama недоступна (ПК выключен или Ollama не запущена).\n"
+                "Генерация невозможна."
+            )
+            return
+
         news_list = news_fetcher.get_news_batch(max_count=15)
 
         if not news_list:

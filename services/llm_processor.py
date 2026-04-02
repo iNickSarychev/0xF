@@ -14,6 +14,14 @@ class LLMProcessor:
             timeout=httpx.Timeout(300.0, connect=10.0)
         )
 
+    async def is_available(self) -> bool:
+        """Проверяет доступность Ollama (лёгкий ping)."""
+        try:
+            await self.client.list()
+            return True
+        except Exception:
+            return False
+
     def cosine_similarity(self, v1: List[float], v2: List[float]) -> float:
         dot = sum(a * b for a, b in zip(v1, v2))
         mag1 = math.sqrt(sum(a * a for a in v1))

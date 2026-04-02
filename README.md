@@ -51,11 +51,46 @@
    ADMIN_CHAT_ID=123456789
    ```
 
-5. **Запуск:**
+5. **Запуск (локально, Windows):**
    В Windows используйте `start_bot.bat` для автоматической очистки зависших процессов и спокойного старта:
    ```cmd
    start_bot.bat
    ```
+
+## 🌐 Деплой на VDS (Ubuntu) + Ollama на локальном ПК
+
+Бот может работать на удалённом сервере, а LLM-генерацию выполнять на вашем ПК через **Tailscale VPN**.
+
+1. **Установите Tailscale** на ПК ([tailscale.com/download](https://tailscale.com/download)) и на VDS:
+   ```bash
+   curl -fsSL https://tailscale.com/install.sh | sh
+   sudo tailscale up
+   ```
+
+2. **Настройте Ollama** на ПК для приёма внешних подключений (переменная окружения Windows):
+   ```
+   OLLAMA_HOST=0.0.0.0
+   ```
+
+3. **Запустите скрипт установки** на VDS:
+   ```bash
+   bash <(curl -s https://raw.githubusercontent.com/NickSarychev/0xF/main/deploy/setup_vds.sh)
+   ```
+
+4. **Отредактируйте `.env`** на VDS, указав Tailscale IP вашего ПК:
+   ```bash
+   nano /opt/0xf/.env
+   # OLLAMA_BASE_URL=http://100.x.x.x:11434
+   ```
+
+5. **Запустите как systemd-сервис:**
+   ```bash
+   sudo cp /opt/0xf/deploy/bot.service /etc/systemd/system/0xf-bot.service
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now 0xf-bot
+   ```
+
+> **Примечание:** Если ПК выключен или Ollama не запущена, бот автоматически пропускает генерацию и ждёт следующего цикла.
 
 ## 🎮 Администрирование через Telegram
 Бот поддерживает прямое управление параметрами из интерфейса Telegram для Администратора:

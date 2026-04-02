@@ -1,0 +1,21 @@
+[Unit]
+Description=0xFUTURE AI News Bot
+After=network.target tailscaled.service
+Wants=tailscaled.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/0xf
+ExecStart=/opt/0xf/venv/bin/python3 main.py
+Restart=always
+RestartSec=10
+EnvironmentFile=/opt/0xf/.env
+
+# Логирование
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=0xf-bot
+
+[Install]
+WantedBy=multi-user.target
