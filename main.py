@@ -104,9 +104,16 @@ async def generate_and_moderate():
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
 
-        final_text = article_text[:3800]
+        # Умная обрезка: ищем последнюю точку перед лимитом, чтобы не ломать теги и смысл
         if len(article_text) > 3800:
-            final_text += "..."
+            truncated_text = article_text[:3800]
+            last_period = truncated_text.rfind('.')
+            if last_period > 3000:
+                final_text = truncated_text[:last_period+1] + " (текст сокращен...)"
+            else:
+                final_text = truncated_text + "..."
+        else:
+            final_text = article_text
 
         # Добавляем ссылку на источник
         if source_link:
