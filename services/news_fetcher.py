@@ -34,10 +34,37 @@ class NewsFetcher:
 
                     # Проверяем, есть ли уже такая новость в БД
                     if not self.db.is_news_sent(entry.title, entry.link):
+                        # Ищем картинку
+                        image_url = None
+                        
+                        # 1. Проверяем enclosures
+                        if entry.get("enclosures"):
+                            for enc in entry.enclosures:
+                                if enc.get("type", "").startswith("image/"):
+                                    image_url = enc.get("url")
+                                    break
+                        
+                        # 2. Проверяем media:content или media:thumbnail (через namespaces)
+                        if not image_url:
+                            media_content = entry.get("media_content")
+                            if media_content and isinstance(media_content, list):
+                                image_url = media_content[0].get("url")
+                            elif entry.get("media_thumbnail"):
+                                image_url = entry.get("media_thumbnail")[0].get("url")
+                        
+                        # 3. Достаем из текста (превью в summary/description)
+                        if not image_url:
+                            import re
+                            content = entry.get("summary", entry.get("description", ""))
+                            img_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', content)
+                            if img_match:
+                                image_url = img_match.group(1)
+
                         all_news.append({
                             "title": entry.title,
                             "summary": entry.get("summary", entry.get("description", "")),
                             "link": entry.link,
+                            "image": image_url,
                             "published": pub_parsed
                         })
             except Exception as e:

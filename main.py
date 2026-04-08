@@ -39,19 +39,27 @@ async def admin_only_middleware(handler, event: types.Message, data):
 pending_articles: dict[int, str] = {}
 
 
-async def publish_to_channel(article_text: str):
-    """Публикует статью на канале."""
+async def publish_to_channel(article_text: str, image_url: str = None):
+    """Публикует статью на канале с фото или текстом."""
     try:
-        await bot.send_message(
-            config.CHANNEL_ID, article_text, request_timeout=60
-        )
+        if image_url:
+            await bot.send_photo(
+                config.CHANNEL_ID,
+                photo=image_url,
+                caption=article_text,
+                request_timeout=60
+            )
+        else:
+            await bot.send_message(
+                config.CHANNEL_ID, article_text, request_timeout=60
+            )
         logger.info("Article published to channel.")
     except Exception as e:
         logger.error(f"Failed to publish to channel: {e}")
+        # Если не удалось отправить фото (например, битая ссылка), пробуем просто текст
         try:
             await bot.send_message(
-                config.CHANNEL_ID, article_text,
-                parse_mode=None, request_timeout=60
+                config.CHANNEL_ID, article_text, request_timeout=60
             )
         except Exception as fallback_error:
             logger.error(f"Fallback publish also failed: {fallback_error}")
@@ -63,7 +71,7 @@ async def auto_publish(message_id: int):
 
     if message_id in pending_articles:
         article_data = pending_articles.pop(message_id)
-        await publish_to_channel(article_data['text'])
+        await publish_to_channel(article_data['text'], article_data.get('image'))
 
         # Уведомляем админа
         try:
@@ -104,20 +112,11 @@ async def generate_and_moderate():
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
 
-        # Умная обрезка: ищем последнюю точку перед лимитом, чтобы не ломать теги и смысл
-        if len(article_text) > 3800:
-            truncated_text = article_text[:3800]
-            last_period = truncated_text.rfind('.')
-            if last_period > 3000:
-                final_text = truncated_text[:last_period+1] + " (текст сокращен...)"
-            else:
-                final_text = truncated_text + "..."
-        else:
-            final_text = article_text
-
-        # Добавляем ссылку на источник
-        if source_link:
-            final_text += f'\n\n🔗 <a href="{source_link}">Источник</a>'
+        # Форматируем финальный текст: ограничение и подпись канала
+        final_text = article_text.strip()
+        
+        # Добавляем фирменную подпись (без источника)
+        final_text += f"\n\n<b>@AxFUTURE</b>"
 
         # Отправляем админу с кнопками модерации
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -137,27 +136,41 @@ async def generate_and_moderate():
         ])
 
         try:
+            if news_item.get("image"):
+                sent_msg = await bot.send_photo(
+                    config.ADMIN_CHAT_ID,
+                    photo=news_item["image"],
+                    caption=(
+                        f"📝 <b>На модерацию (авто через 10 мин):</b>\n\n"
+                        f"{final_text}"
+                    ),
+                    reply_markup=keyboard,
+                    request_timeout=60
+                )
+            else:
+                sent_msg = await bot.send_message(
+                    config.ADMIN_CHAT_ID,
+                    f"📝 <b>На модерацию (авто через 10 мин):</b>\n\n"
+                    f"{final_text}",
+                    reply_markup=keyboard,
+                    request_timeout=60
+                )
+        except Exception as e:
+            logger.error(f"Error sending moderation message: {e}")
             sent_msg = await bot.send_message(
                 config.ADMIN_CHAT_ID,
-                f"📝 <b>На модерацию:</b>\n"
-                f"<i>(автопубликация через 10 мин)</i>\n\n"
-                f"{'─' * 30}\n\n"
-                f"{final_text}",
-                reply_markup=keyboard,
-                request_timeout=60
-            )
-        except Exception:
-            sent_msg = await bot.send_message(
-                config.ADMIN_CHAT_ID,
-                f"📝 На модерацию (автопубликация через 10 мин):\n\n"
-                f"{final_text}",
+                f"📝 На модерацию:\n\n{final_text}",
                 reply_markup=keyboard,
                 parse_mode=None,
                 request_timeout=60
             )
 
         # Сохраняем статью и запускаем таймер автопубликации
-        pending_articles[sent_msg.message_id] = {'text': final_text, 'news_item': news_item}
+        pending_articles[sent_msg.message_id] = {
+            'text': final_text, 
+            'image': news_item.get("image"),
+            'news_item': news_item
+        }
         asyncio.create_task(auto_publish(sent_msg.message_id))
 
     except Exception as e:
@@ -173,7 +186,7 @@ async def on_approve(callback: types.CallbackQuery):
 
     if message_id in pending_articles:
         article_data = pending_articles.pop(message_id)
-        await publish_to_channel(article_data['text'])
+        await publish_to_channel(article_data['text'], article_data.get('image'))
         await callback.message.edit_reply_markup(reply_markup=None)
         await callback.answer("✅ Опубликовано на канале!", show_alert=True)
     else:
@@ -326,31 +339,33 @@ async def cmd_news(message: types.Message):
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
 
-        final_text = article_text[:3800]
-        if len(article_text) > 3800:
-            final_text += "..."
-
-        if source_link:
-            final_text += f'\n\n🔗 <a href="{source_link}">Источник</a>'
-
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✅ Опубликовать", callback_data="approve"),
-                InlineKeyboardButton(text="❌ Отклонить", callback_data="reject")
-            ],
-            [
-                InlineKeyboardButton(text="🎓 Отклонить (Обучить)", callback_data="reject_teach")
-            ]
-        ])
+        # Форматируем текст
+        final_text = article_text.strip() + f"\n\n<b>@AxFUTURE</b>"
 
         try:
-            await status_msg.edit_text(final_text, reply_markup=keyboard, request_timeout=60)
-        except Exception:
-            await status_msg.edit_text(
-                final_text, parse_mode=None, reply_markup=keyboard, request_timeout=60
-            )
+            if news_item.get("image"):
+                await status_msg.delete()  # Удаляем статусное сообщение, чтобы отправить фото
+                sent_msg = await bot.send_photo(
+                    message.chat.id,
+                    photo=news_item["image"],
+                    caption=final_text,
+                    reply_markup=keyboard,
+                    request_timeout=60
+                )
+                status_msg_id = sent_msg.message_id
+            else:
+                await status_msg.edit_text(final_text, reply_markup=keyboard, request_timeout=60)
+                status_msg_id = status_msg.message_id
+        except Exception as e:
+            logger.error(f"Error sending manual news: {e}")
+            await message.answer(final_text, reply_markup=keyboard, parse_mode=None)
+            return
             
-        pending_articles[status_msg.message_id] = {'text': final_text, 'news_item': news_item}
+        pending_articles[status_msg_id] = {
+            'text': final_text, 
+            'image': news_item.get("image"),
+            'news_item': news_item
+        }
 
     except Exception as e:
         logger.error(f"Error processing /news: {e}")
