@@ -88,6 +88,20 @@ async def auto_publish(message_id: int):
             logger.warning(f"Could not notify admin about auto-publish: {e}")
 
 
+def clean_llm_output(text: str) -> str:
+    """Очищает текст от технических артефактов нейросети."""
+    import re
+    # Удаляем приписки про объем текста
+    text = re.sub(r'\(Объем текста:.*?\)', '', text, flags=re.IGNORECASE)
+    # Удаляем пустые теги и странные конструкции вроде <i></i>*
+    text = re.sub(r'<i><\/i>\*?', '', text)
+    # Удаляем строки, состоящие только из спецсимволов и разделителей
+    text = re.sub(r'\n[\*\-]{3,}\n', '\n\n', text)
+    # Удаляем эмодзи, если они все же пролезут (базовая чистка)
+    # Оставляем только буквы, цифры, пунктуацию и базовые спецсимволы
+    return text.strip()
+
+
 async def generate_and_moderate():
     """Генерирует статью и отправляет админу на модерацию."""
     try:
@@ -108,6 +122,9 @@ async def generate_and_moderate():
         if not news_item:
             logger.info("News rejected by model or no news selected.")
             return
+
+        # Очистка текста от мусора
+        article_text = clean_llm_output(article_text)
 
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
