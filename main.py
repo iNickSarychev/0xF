@@ -106,6 +106,9 @@ def clean_llm_output(text: str) -> str:
     text = re.sub(r'\n[\*\-]{3,}\n', '\n\n', text)
     # Удаляем лишние пустые строки
     text = re.sub(r'\n{3,}', '\n\n', text)
+    text = text.strip()
+    # Удаляем одинокий номер новости в начале текста (1-2 цифры на отдельной строке)
+    text = re.sub(r'^\d{1,2}\s*\n', '', text)
     return text.strip()
 
 

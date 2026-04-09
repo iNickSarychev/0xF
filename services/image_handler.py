@@ -11,15 +11,31 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3
 RETRY_DELAY_SECONDS = 5
 
+# Домены со стоковыми фото (водяные знаки)
+WATERMARK_DOMAINS = [
+    "shutterstock.com", "gettyimages.com", "istockphoto.com",
+    "dreamstime.com", "123rf.com", "depositphotos.com",
+    "alamy.com", "bigstockphoto.com", "canstockphoto.com",
+    "stock.adobe.com", "photospin.com",
+]
+
 
 class ImageHandler:
     def __init__(self, min_width: int = 800):
         self.min_width = min_width
 
+    def _is_stock_url(self, url: str) -> bool:
+        """Проверяет, не ведёт ли URL на стоковый сайт с водяными знаками."""
+        url_lower = url.lower()
+        return any(domain in url_lower for domain in WATERMARK_DOMAINS)
+
     def _search_sync(self, query: str, max_results: int) -> List[str]:
         """Синхронный поиск (вызывается через to_thread)."""
         results = DDGS().images(query, max_results=max_results)
-        return [r["image"] for r in results if "image" in r]
+        return [
+            r["image"] for r in results
+            if "image" in r and not self._is_stock_url(r["image"])
+        ]
 
     async def search_images(self, query: str, max_results: int = 5) -> List[str]:
         """Поиск изображений через DuckDuckGo с retry при ratelimit."""
@@ -78,8 +94,10 @@ class ImageHandler:
         if not image_urls:
             # Fallback: пробуем добавить "news photo" к запросу
             logger.info("No images found, trying fallback query...")
-            await asyncio.sleep(2)  # Пауза перед повторным запросом
-            image_urls = await self.search_images(f"{query} news photo", max_results=3)
+            await asyncio.sleep(2)
+            image_urls = await self.search_images(
+                f"{query} news photo -watermark -stock", max_results=5
+            )
 
         logger.info(f"DDG returned {len(image_urls)} image URLs for '{query}'")
 
