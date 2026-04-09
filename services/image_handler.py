@@ -1,24 +1,28 @@
+import asyncio
 import aiohttp
 import logging
 import io
 from PIL import Image
-from duckduckgo_search import AsyncDDGS
+from duckduckgo_search import DDGS
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
+
 
 class ImageHandler:
     def __init__(self, min_width: int = 800):
         self.min_width = min_width
 
+    def _search_sync(self, query: str, max_results: int) -> List[str]:
+        """Синхронный поиск (вызывается через to_thread)."""
+        with DDGS() as ddgs:
+            results = list(ddgs.images(query, max_results=max_results))
+            return [r["image"] for r in results if "image" in r]
+
     async def search_images(self, query: str, max_results: int = 5) -> List[str]:
         """Поиск изображений через DuckDuckGo."""
         try:
-            async with AsyncDDGS() as ddgs:
-                results = await ddgs.images(query, max_results=max_results)
-                if not results:
-                    return []
-                return [r["image"] for r in results if "image" in r]
+            return await asyncio.to_thread(self._search_sync, query, max_results)
         except Exception as e:
             logger.error(f"DuckDuckGo search error for query '{query}': {e}")
             return []
