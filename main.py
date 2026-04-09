@@ -2,6 +2,7 @@ import asyncio
 import aiohttp
 import logging
 import sys
+import pytz
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -47,7 +48,8 @@ bot = Bot(
     default=DefaultBotProperties(parse_mode="HTML"),
 )
 dp = Dispatcher(storage=MemoryStorage())
-scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
+msk_tz = pytz.timezone("Europe/Moscow")
+scheduler = AsyncIOScheduler(timezone=msk_tz)
 
 # Счётчик подряд идущих сбоев LLM для алертов
 _llm_failure_streak: int = 0
@@ -349,7 +351,7 @@ async def generate_and_moderate() -> None:
 
         final_text = _truncate_article(article_text) + "\n\n<b>@AxFUTURE</b>"
         keyboard = _build_moderation_keyboard()
-        publish_time = datetime.now() + timedelta(minutes=10)
+        publish_time = datetime.now(msk_tz) + timedelta(minutes=10)
 
         pending_data = {
             "text": final_text,
@@ -456,7 +458,7 @@ async def on_regenerate(callback: types.CallbackQuery) -> None:
 
         final_text = _truncate_article(article_text) + "\n\n<b>@AxFUTURE</b>"
         keyboard = _build_moderation_keyboard()
-        publish_time = datetime.now() + timedelta(minutes=10)
+        publish_time = datetime.now(msk_tz) + timedelta(minutes=10)
 
         new_pending = {
             "text": final_text,
@@ -702,7 +704,7 @@ async def cmd_news(message: types.Message) -> None:
                 await message.answer("❌ Внутренняя ошибка форматирования поста.")
                 return
 
-        publish_time = datetime.now() + timedelta(minutes=10)
+        publish_time = datetime.now(msk_tz) + timedelta(minutes=10)
         pending_data = {
             "text": final_text,
             "image": valid_image,
@@ -730,7 +732,11 @@ async def restore_pending_jobs() -> None:
     count = 0
     for message_id, data, publish_at_str in pending_posts:
         publish_at = datetime.fromisoformat(publish_at_str)
-        if publish_at <= datetime.now():
+        # Делаем время из БД тоже aware, если оно было сохранено в ISO
+        if publish_at.tzinfo is None:
+            publish_at = msk_tz.localize(publish_at)
+            
+        if publish_at <= datetime.now(msk_tz):
             logger.info(f"Auto-publishing missed post: {message_id}")
             await auto_publish(message_id)
         else:
