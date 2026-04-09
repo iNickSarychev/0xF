@@ -40,6 +40,7 @@ class LLMProcessor:
         """
         try:
             rejected_data = db.get_all_rejected_vectors()
+            sent_data = db.get_all_sent_vectors()
             filtered_news = []
             
             for news in news_list:
@@ -47,16 +48,30 @@ class LLMProcessor:
                 try:
                     emb_resp = await self.client.embeddings(model='nomic-embed-text', prompt=text_for_emb)
                     news_vector = emb_resp['embedding']
+                    news['vector'] = news_vector # Сохраняем вектор, чтобы потом записать его при публикации
                     
-                    is_rejected = False
+                    is_rejected_or_dup = False
+                    
+                    # 1. Проверяем на совпадение с "Отклоненными" (обучение)
                     for _, rej_vec in rejected_data:
                         sim = self.cosine_similarity(news_vector, rej_vec)
                         if sim > 0.85:
-                            is_rejected = True
+                            is_rejected_or_dup = True
                             break
-                    if not is_rejected:
+                            
+                    # 2. Проверяем на совпадение с УЖЕ ОПУБЛИКОВАННЫМИ (защита от дублей из разных источников)
+                    if not is_rejected_or_dup:
+                        for _, sent_vec in sent_data:
+                            sim = self.cosine_similarity(news_vector, sent_vec)
+                            if sim > 0.88: # Чуть более строгий порог для дублей
+                                is_rejected_or_dup = True
+                                logger.info(f"News skipped as DUPLICATE of previously sent: {news['title']}")
+                                break
+
+                    if not is_rejected_or_dup:
                         filtered_news.append(news)
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Embeddings error: {e}")
                     filtered_news.append(news)
             
             news_list = filtered_news
@@ -118,7 +133,6 @@ class LLMProcessor:
 
 ФОРМАТ СТРОГО ТАКОЙ:
 
-НОМЕР: [номер_новости]
 IMAGE_QUERY: [english search query for image]
 
 ВНИМАНИЕ_АБСОЛЮТНО_ВЕСЬ_ТЕКСТ_ПОСТА_СТРОГО_НА_РУССКОМ_ЯЗЫКЕ:
@@ -129,7 +143,7 @@ IMAGE_QUERY: [english search query for image]
 - любые мета-комментарии о качестве текста
 
 КРИТИЧНО: Текст самого поста должен быть на **РУССКОМ ЯЗЫКЕ**, даже если новости на английском!
-Выведи ТОЛЬКО: НОМЕР, IMAGE_QUERY и сам текст поста (на русском). Ничего больше.
+Выведи IMAGE_QUERY и сам текст поста (на русском). Ничего больше.
 
 НОВОСТИ:
 {news_input}
@@ -176,7 +190,6 @@ IMAGE_QUERY: [english search query for image]
             
             # Удаляем маркер старта текста, если модель его напечатала
             import re
-            article_text = re.sub(r'(?i)ЗДЕСЬ_СРАЗУ_НАЧИНАЕТСЯ_ТЕКСТ_ПОСТА\n?', '', article_text).strip()
             article_text = re.sub(r'(?i)ВНИМАНИЕ_АБСОЛЮТНО_ВЕСЬ_ТЕКСТ_ПОСТА_СТРОГО_НА_РУССКОМ_ЯЗЫКЕ:\n?', '', article_text).strip()
             article_text = re.sub(r'\[текст\]\n?', '', article_text).strip()
 
@@ -230,7 +243,7 @@ IMAGE_QUERY: [english search query for image]
                 prompt=prompt,
                 images=[image_b64],
                 stream=False,
-                options={"num_predict": 10, "temperature": 0.1}
+                options={"num_predict": 10, "temperature": 0.5}
             )
             answer = response['response'].strip().upper()
             logger.debug(f"\n========== VISION RAW OUTPUT ==========\n{answer}\n=======================================")

@@ -24,6 +24,14 @@ class Database:
                 )
             """)
             conn.execute("""
+                CREATE TABLE IF NOT EXISTS sent_vectors (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    text_preview TEXT NOT NULL,
+                    vector_json TEXT NOT NULL,
+                    sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS rejected_vectors (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     text_preview TEXT NOT NULL,
@@ -104,6 +112,21 @@ class Database:
         import json
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("SELECT text_preview, vector_json FROM rejected_vectors")
+            return [(row[0], json.loads(row[1])) for row in cursor.fetchall()]
+
+    def save_sent_vector(self, text_preview: str, vector: list[float]):
+        import json
+        vector_json = json.dumps(vector)
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("INSERT INTO sent_vectors (text_preview, vector_json) VALUES (?, ?)", (text_preview, vector_json))
+            # Удаляем старые векторы (старше 7 дней), чтобы база не пухла
+            conn.execute("DELETE FROM sent_vectors WHERE sent_at < datetime('now', '-7 days')")
+            conn.commit()
+
+    def get_all_sent_vectors(self) -> list[tuple[str, list[float]]]:
+        import json
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("SELECT text_preview, vector_json FROM sent_vectors WHERE sent_at >= datetime('now', '-7 days')")
             return [(row[0], json.loads(row[1])) for row in cursor.fetchall()]
 
     def add_source(self, url: str) -> bool:

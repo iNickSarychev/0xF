@@ -285,6 +285,8 @@ async def generate_and_moderate():
 
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
+        if 'vector' in news_item:
+            db.save_sent_vector(news_item['title'], news_item['vector'])
 
         # Умная обрезка: ищем последнюю точку перед лимитом Telegram
         article_text = article_text.strip()
@@ -530,6 +532,8 @@ async def cmd_news(message: types.Message):
 
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
+        if 'vector' in news_item:
+            db.save_sent_vector(news_item['title'], news_item['vector'])
 
         # Умный поиск и проверка картинок
         valid_image = None
