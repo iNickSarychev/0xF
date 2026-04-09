@@ -8,6 +8,7 @@ from config import config
 from database import db
 from services.vector_service import vector_service
 from services.prompts import EDITOR_PROMPT
+from services.critic_agent import critic_agent
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,16 @@ class EditorAgent:
             # HTML-очистка
             article_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', article_text)
             article_text = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'<i>\1</i>', article_text)
+
+            # 5. Reflection Loop: отправляем черновик Критику
+            article_text, critique = await critic_agent.run_reflection_loop(
+                initial_draft=article_text,
+                max_iterations=2,
+            )
+            logger.info(
+                f"Final critic score: {critique.score}/10 | "
+                f"Approved: {critique.is_approved}"
+            )
 
             return article_text, selected_news, image_query
 
