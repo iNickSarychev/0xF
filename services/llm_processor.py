@@ -145,9 +145,7 @@ class LLMProcessor:
                 prompt=prompt,
                 stream=False,
                 options={
-                    "num_ctx": 8192,
                     "num_predict": 4096,
-                    "temperature": 0.5
                 }
             )
             import re

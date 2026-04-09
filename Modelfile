@@ -1,0 +1,11 @@
+FROM qwen2.5:14b
+
+PARAMETER temperature 0.85
+PARAMETER top_p 0.9
+PARAMETER repeat_penalty 1.15
+
+# увеличивает "живость"
+PARAMETER presence_penalty 0.5
+
+# чтобы не обрезало посты
+PARAMETER num_ctx 4096
