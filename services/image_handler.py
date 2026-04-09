@@ -3,10 +3,13 @@ import aiohttp
 import logging
 import io
 from PIL import Image
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 3
+RETRY_DELAY_SECONDS = 5
 
 
 class ImageHandler:
@@ -15,43 +18,55 @@ class ImageHandler:
 
     def _search_sync(self, query: str, max_results: int) -> List[str]:
         """Синхронный поиск (вызывается через to_thread)."""
-        with DDGS() as ddgs:
-            results = list(ddgs.images(query, max_results=max_results))
-            return [r["image"] for r in results if "image" in r]
+        results = DDGS().images(query, max_results=max_results)
+        return [r["image"] for r in results if "image" in r]
 
     async def search_images(self, query: str, max_results: int = 5) -> List[str]:
-        """Поиск изображений через DuckDuckGo."""
-        try:
-            return await asyncio.to_thread(self._search_sync, query, max_results)
-        except Exception as e:
-            logger.error(f"DuckDuckGo search error for query '{query}': {e}")
-            return []
+        """Поиск изображений через DuckDuckGo с retry при ratelimit."""
+        for attempt in range(MAX_RETRIES):
+            try:
+                return await asyncio.to_thread(self._search_sync, query, max_results)
+            except Exception as e:
+                error_message = str(e).lower()
+                if "ratelimit" in error_message or "403" in error_message:
+                    wait_time = RETRY_DELAY_SECONDS * (attempt + 1)
+                    logger.warning(
+                        f"DDG ratelimit (attempt {attempt + 1}/{MAX_RETRIES}). "
+                        f"Waiting {wait_time}s..."
+                    )
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(f"DDG search error for '{query}': {e}")
+                    return []
+        logger.error(f"DDG ratelimit: all {MAX_RETRIES} retries exhausted for '{query}'")
+        return []
 
     async def is_valid_image(self, url: str) -> bool:
         """Проверка валидности и размера изображения."""
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=10) as response:
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url) as response:
                     if response.status != 200:
                         return False
-                    
+
                     content = await response.read()
                     img = Image.open(io.BytesIO(content))
-                    
+
                     # Проверяем ширину
                     width, _ = img.size
                     if width < self.min_width:
-                        logger.info(f"Image {url} rejected: width {width} < {self.min_width}")
+                        logger.info(f"Image rejected: width {width} < {self.min_width}")
                         return False
-                    
+
                     return True
         except Exception as e:
             logger.debug(f"Failed to validate image {url}: {e}")
             return False
 
     async def find_best_image(
-        self, 
-        query: str, 
+        self,
+        query: str,
         max_search_results: int = 5
     ) -> Optional[str]:
         """
@@ -59,10 +74,11 @@ class ImageHandler:
         Возвращает первую валидную.
         """
         image_urls = await self.search_images(query, max_results=max_search_results)
-        
+
         if not image_urls:
             # Fallback: пробуем добавить "news photo" к запросу
             logger.info("No images found, trying fallback query...")
+            await asyncio.sleep(2)  # Пауза перед повторным запросом
             image_urls = await self.search_images(f"{query} news photo", max_results=3)
 
         logger.info(f"DDG returned {len(image_urls)} image URLs for '{query}'")
@@ -71,8 +87,9 @@ class ImageHandler:
             if await self.is_valid_image(url):
                 logger.info(f"Image selected: {url}")
                 return url
-            
+
         logger.warning(f"No valid images found for query '{query}'")
         return None
+
 
 image_handler = ImageHandler()
