@@ -1,7 +1,7 @@
 import ollama
 import httpx
 import math
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Optional
 from config import config
 from database import db
 
@@ -32,7 +32,7 @@ class LLMProcessor:
 
     async def process_news_batch(
         self, news_list: List[Dict[str, str]]
-    ) -> Tuple[str, Any]:
+    ) -> Tuple[str, Any, Optional[str]]:
         """
         Принимает список новостей, векторами фильтрует отклоненные, 
         выбирает ОДНУ и пишет лонгрид.
@@ -115,16 +115,20 @@ class LLMProcessor:
 - списки через «–» если нужно
 - без эмодзи и хештегов
 
+В конце добавь техническое поле с кратким поисковым запросом для картинки на английском языке.
+Запрос должен описывать конкретный визуальный образ, подходящий к новости.
+
 ФОРМАТ:
 
-НОМЕР: [число]
+НОМЕР: [номер_новости]
+IMAGE_QUERY: [english search query for image]
 
 [текст]
 
 Перед отправкой:
 прочитай текст и упрости его ещё на 20%.
 
-Пиши ТОЛЬКО на русском.
+Пиши ТОЛЬКО на русском (кроме IMAGE_QUERY).
 
 НОВОСТИ:
 {news_input}
@@ -147,8 +151,9 @@ class LLMProcessor:
             raw_text = re.sub(r'<\|thought\|>.*?</\|thought\|>', '', raw_text, flags=re.DOTALL)
             raw_text = raw_text.strip()
 
-            # Извлекаем номер выбранной новости
+            # Извлекаем номер выбранной новости и поисковый запрос
             selected_news = None
+            image_query = None
             article_lines = []
 
             for line in raw_text.split("\n"):
@@ -161,11 +166,13 @@ class LLMProcessor:
                             selected_news = news_list[index]
                     except (ValueError, IndexError):
                         pass
+                elif stripped.upper().startswith("IMAGE_QUERY:"):
+                    image_query = stripped.split(":", 1)[1].strip()
                 else:
                     article_lines.append(line)
 
             article_text = "\n".join(article_lines).strip()
-            
+
             # Конвертируем случайный маркдаун в HTML
             article_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', article_text)
             article_text = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'<i>\1</i>', article_text)
@@ -174,10 +181,33 @@ class LLMProcessor:
             if not selected_news and news_list:
                 selected_news = news_list[0]
 
-            return article_text, selected_news
+            return article_text, selected_news, image_query
 
         except Exception as e:
-            return f"Ошибка при анализе нейросетью: {str(e)}", None
+            return f"Ошибка при анализе нейросетью: {str(e)}", None, None
+
+    async def check_image_relevance(self, post_text: str, image_url: str) -> bool:
+        """Проверяет релевантность картинки посту через LLM."""
+        prompt = (
+            "Ты — редактор Telegram-канала.\n"
+            "Проверь, подходит ли изображение к тексту поста.\n\n"
+            f"ТЕКСТ ПОСТА:\n{post_text}\n\n"
+            f"URL КАРТИНКИ: {image_url}\n\n"
+            "Картинка должна визуально отражать суть новости "
+            "или быть качественным тематическим фото.\n"
+            "Ответь ТОЛЬКО одним словом: YES или NO."
+        )
+        try:
+            response = await self.client.generate(
+                model=self.model,
+                prompt=prompt,
+                stream=False,
+                options={"num_predict": 10}
+            )
+            answer = response['response'].strip().upper()
+            return "YES" in answer
+        except Exception:
+            return True  # Фоллбэк — считаем релевантной
 
 
 llm_processor = LLMProcessor()

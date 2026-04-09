@@ -14,6 +14,7 @@ from config import config
 from database import db
 from services.news_fetcher import news_fetcher
 from services.llm_processor import llm_processor
+from services.image_handler import image_handler
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -91,14 +92,16 @@ async def auto_publish(message_id: int):
 def clean_llm_output(text: str) -> str:
     """Очищает текст от технических артефактов нейросети."""
     import re
+    # Удаляем строку IMAGE_QUERY
+    text = re.sub(r'^IMAGE_QUERY:.*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
     # Удаляем приписки про объем текста
     text = re.sub(r'\(Объем текста:.*?\)', '', text, flags=re.IGNORECASE)
     # Удаляем пустые теги и странные конструкции вроде <i></i>*
     text = re.sub(r'<i><\/i>\*?', '', text)
     # Удаляем строки, состоящие только из спецсимволов и разделителей
     text = re.sub(r'\n[\*\-]{3,}\n', '\n\n', text)
-    # Удаляем эмодзи, если они все же пролезут (базовая чистка)
-    # Оставляем только буквы, цифры, пунктуацию и базовые спецсимволы
+    # Удаляем лишние пустые строки
+    text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
 
@@ -135,8 +138,9 @@ async def generate_and_moderate():
         # Генерация с контролем качества (до 2 попыток)
         article_text = None
         news_item = None
+        image_query = None
         for attempt in range(2):
-            article_text, news_item = await llm_processor.process_news_batch(
+            article_text, news_item, image_query = await llm_processor.process_news_batch(
                 news_list
             )
 
@@ -155,6 +159,18 @@ async def generate_and_moderate():
         if not _passes_quality_check(article_text):
             logger.error("Quality check failed after 2 attempts. Skipping.")
             return
+
+        # Если в RSS нет картинки — ищем через DuckDuckGo
+        if not news_item.get("image") and image_query:
+            logger.info(f"No RSS image. Searching DDG: '{image_query}'")
+            found_image = await image_handler.find_best_image(
+                query=image_query,
+                llm_processor=llm_processor,
+                post_text=article_text
+            )
+            if found_image:
+                news_item["image"] = found_image
+                logger.info(f"DDG image found: {found_image}")
 
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
@@ -382,7 +398,7 @@ async def cmd_news(message: types.Message):
             f"🖊️ Найдено: {len(news_list)}. Генерирую статью..."
         )
 
-        article_text, news_item = await llm_processor.process_news_batch(
+        article_text, news_item, image_query = await llm_processor.process_news_batch(
             news_list
         )
 
@@ -395,6 +411,17 @@ async def cmd_news(message: types.Message):
 
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
+
+        # Если в RSS нет картинки — ищем через DuckDuckGo
+        if not news_item.get("image") and image_query:
+            await status_msg.edit_text("🖼️ Ищу подходящую картинку...")
+            found_image = await image_handler.find_best_image(
+                query=image_query,
+                llm_processor=llm_processor,
+                post_text=article_text
+            )
+            if found_image:
+                news_item["image"] = found_image
 
         # Умная обрезка: ищем последнюю точку перед лимитом Telegram
         article_text = article_text.strip()
