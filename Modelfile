@@ -1,6 +1,6 @@
 FROM qwen2.5:14b
 
-PARAMETER temperature 0.85
+PARAMETER temperature 0.9
 PARAMETER top_p 0.9
 PARAMETER repeat_penalty 1.15
 
