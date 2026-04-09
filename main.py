@@ -241,22 +241,33 @@ async def generate_and_moderate():
         # 1. Сначала проверяем картинку из RSS
         rss_image = news_item.get("image")
         if rss_image and await image_handler.is_valid_image(rss_image):
-            valid_image = rss_image
-            logger.info(f"Using valid image from RSS: {valid_image}")
+            if await llm_processor.check_image_vision(article_text, rss_image):
+                valid_image = rss_image
+                logger.info(f"Using valid image from RSS: {valid_image}")
+            else:
+                logger.info(f"Vision model rejected RSS image: {rss_image}")
             
-        # 2. Если в RSS нет (или мелкая) - парсим саму новостную статью (og:image)
+        # 2. Если в RSS нет (или мелкая/забракована) - парсим саму новостную статью (og:image)
         if not valid_image and news_item.get("link"):
             logger.info("Parsing original article for High-Res image...")
             extracted_img = await image_handler.extract_article_image(news_item["link"])
             if extracted_img:
-                valid_image = extracted_img
+                if await llm_processor.check_image_vision(article_text, extracted_img):
+                    valid_image = extracted_img
+                    logger.info(f"Using valid og:image: {valid_image}")
+                else:
+                    logger.info(f"Vision model rejected og:image: {extracted_img}")
                 
         # 3. Если всё равно нет картинок - ищем в сети (DuckDuckGo)
         if not valid_image and image_query:
             logger.info(f"Searching DDG: '{image_query}'")
-            valid_image = await image_handler.find_best_image(query=image_query)
-            if valid_image:
-                logger.info(f"DDG image found: {valid_image}")
+            ddg_img = await image_handler.find_best_image(query=image_query)
+            if ddg_img:
+                if await llm_processor.check_image_vision(article_text, ddg_img):
+                    valid_image = ddg_img
+                    logger.info(f"DDG image found and approved: {valid_image}")
+                else:
+                    logger.info(f"Vision model rejected DDG image: {ddg_img}")
              
         news_item["image"] = valid_image
 

@@ -192,28 +192,50 @@ IMAGE_QUERY: [english search query for image]
         except Exception as e:
             return f"Ошибка при анализе нейросетью: {str(e)}", None, None
 
-    async def check_image_relevance(self, post_text: str, image_url: str) -> bool:
-        """Проверяет релевантность картинки посту через LLM."""
+    async def check_image_vision(self, post_text: str, image_url: str) -> bool:
+        """Проверяет релевантность картинки посту через LLaVA Vision."""
+        if not await self.is_available():
+            return True # Пропускаем, если Ollama выключена
+            
+        import aiohttp
+        import base64
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Скачиваем изображение в память
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url, timeout=10) as resp:
+                    if resp.status != 200:
+                        logger.warning(f"Vision check: Failed to download image {image_url}")
+                        return False
+                    image_bytes = await resp.read()
+                    image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+        except Exception as e:
+            logger.error(f"Vision check: Error downloading image {image_url}: {e}")
+            return False
+
         prompt = (
-            "Ты — редактор Telegram-канала.\n"
-            "Проверь, подходит ли изображение к тексту поста.\n\n"
-            f"ТЕКСТ ПОСТА:\n{post_text}\n\n"
-            f"URL КАРТИНКИ: {image_url}\n\n"
-            "Картинка должна визуально отражать суть новости "
-            "или быть качественным тематическим фото.\n"
-            "Ответь ТОЛЬКО одним словом: YES или NO."
+            "You are a strict editorial assistant. Look at this image.\n"
+            f"Here is a summary of the news article:\n{post_text}\n\n"
+            "Does this image directly depict the event, people, or concepts mentioned in the text? "
+            "Reject abstract logos, memes, or completely unrelated graphics. "
+            "Answer ONLY with YES or NO."
         )
         try:
             response = await self.client.generate(
-                model=self.model,
+                model="llava:7b",
                 prompt=prompt,
+                images=[image_b64],
                 stream=False,
-                options={"num_predict": 10}
+                options={"num_predict": 10, "temperature": 0.1}
             )
             answer = response['response'].strip().upper()
+            logger.info(f"Vision model verdict for image {image_url}: {answer}")
             return "YES" in answer
-        except Exception:
-            return True  # Фоллбэк — считаем релевантной
+        except Exception as e:
+            logger.error(f"Vision model generation error: {e}")
+            return True  # Фоллбэк — если зрения нет или оно сломалось, пропускаем картинку
 
 
 llm_processor = LLMProcessor()
