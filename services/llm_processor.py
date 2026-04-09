@@ -128,22 +128,21 @@ class LLMProcessor:
 - списки через «–» если нужно
 - без эмодзи и хештегов
 
-В конце добавь техническое поле с кратким поисковым запросом для картинки на английском языке.
-Запрос должен описывать конкретный визуальный образ, подходящий к новости.
+В конце выбери одну новость и напиши пост. 
 
-ФОРМАТ СТРОГО ТАКОЙ:
+ПРАВИЛА:
+1. Текст самого поста должен быть на **РУССКОМ ЯЗЫКЕ**, даже если новости на английском!
+2. Для картинки составь IMAGE_QUERY на английском.
+3. selected_index — это номер новости из списка (1, 2, 3...).
 
-IMAGE_QUERY: [english search query for image]
+ОТВЕТЬ СТРОГО В ФОРМАТЕ JSON:
+{{
+  "selected_index": 1,
+  "image_query": "search query for image",
+  "post_text": "текст поста на русском"
+}}
 
-ВНИМАНИЕ_АБСОЛЮТНО_ВЕСЬ_ТЕКСТ_ПОСТА_СТРОГО_НА_РУССКОМ_ЯЗЫКЕ:
-
-ЗАПРЕЩЕНО добавлять в ответ:
-- блоки проверки, чеклисты, самооценку
-- строки вроде "Структура:", "Стиль:", "Длина:", "Готово"
-- любые мета-комментарии о качестве текста
-
-КРИТИЧНО: Текст самого поста должен быть на **РУССКОМ ЯЗЫКЕ**, даже если новости на английском!
-Выведи IMAGE_QUERY и сам текст поста (на русском). Ничего больше.
+Никаких пояснений вне JSON.
 
 НОВОСТИ:
 {news_input}
@@ -154,57 +153,45 @@ IMAGE_QUERY: [english search query for image]
                 model=self.model,
                 prompt=prompt,
                 stream=False,
+                format="json",
                 options={
                     "num_predict": 4096,
                 }
             )
-            import re
-            raw_text = response['response'].strip()
+            import json
+            raw_content = response['response'].strip()
             
-            # Удаляем любые теги "размышлений" (встречаются у MoE-моделей)
-            raw_text = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL)
-            raw_text = re.sub(r'<\|thought\|>.*?</\|thought\|>', '', raw_text, flags=re.DOTALL)
-            raw_text = raw_text.strip()
+            # Логируем сырой JSON для отладки
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(f"\n=========== LLM RAW JSON OUTPUT ===========\n{raw_content}\n=====================================")
 
-            # Извлекаем номер выбранной новости и поисковый запрос
+            data = json.loads(raw_content)
+            
+            # Извлекаем данные из JSON (поддерживаем selected_index и selected_news_index на всякий случай)
             selected_news = None
-            image_query = None
-            article_lines = []
-
-            for line in raw_text.split("\n"):
-                stripped = line.strip()
-                if stripped.startswith("НОМЕР:") or stripped.upper().startswith("SELECTED:"):
-                    try:
-                        number_part = stripped.split(":")[1].strip().rstrip(".")
-                        index = int(number_part) - 1
-                        if 0 <= index < len(news_list):
-                            selected_news = news_list[index]
-                    except (ValueError, IndexError):
-                        pass
-                elif stripped.upper().startswith("IMAGE_QUERY:"):
-                    image_query = stripped.split(":", 1)[1].strip()
-                else:
-                    article_lines.append(line)
-
-            article_text = "\n".join(article_lines).strip()
+            idx_val = data.get("selected_index") or data.get("selected_news_index", 1)
+            idx = int(idx_val) - 1
             
-            # Удаляем маркер старта текста, если модель его напечатала
-            import re
-            article_text = re.sub(r'(?i)ВНИМАНИЕ_АБСОЛЮТНО_ВЕСЬ_ТЕКСТ_ПОСТА_СТРОГО_НА_РУССКОМ_ЯЗЫКЕ:\n?', '', article_text).strip()
-            article_text = re.sub(r'\[текст\]\n?', '', article_text).strip()
+            if 0 <= idx < len(news_list):
+                selected_news = news_list[idx]
+            
+            image_query = data.get("image_query")
+            article_text = data.get("post_text", "").strip()
 
-            # Конвертируем случайный маркдаун в HTML
+            # Конвертируем маркдаун в HTML (на случай если модель его всё же выдаст в JSON)
+            import re
             article_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', article_text)
             article_text = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'<i>\1</i>', article_text)
 
-            # Фоллбэк: если модель не указала номер, берём первую новость
+            # Фоллбэк: если модель не указала новость, берем первую
             if not selected_news and news_list:
                 selected_news = news_list[0]
 
             return article_text, selected_news, image_query
 
         except Exception as e:
-            return f"Ошибка при анализе нейросетью: {str(e)}", None, None
+            return f"Ошибка при анализе JSON нейросетью: {str(e)}", None, None
 
     async def check_image_vision(self, post_text: str, image_url: str) -> bool:
         """Проверяет релевантность картинки посту через LLaVA Vision."""
