@@ -94,6 +94,10 @@ def clean_llm_output(text: str) -> str:
     import re
     # Удаляем строку IMAGE_QUERY
     text = re.sub(r'^IMAGE_QUERY:.*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    # Удаляем блоки самопроверки модели: [Проверка...], [Checklist...] и всё после них
+    text = re.sub(r'\[(?:Проверка|Checklist|Check|Самопроверка).*', '', text, flags=re.DOTALL | re.IGNORECASE)
+    # Удаляем отдельные строки-метрики: "Структура:*", "Стиль:*", "Длина:*" и т.п.
+    text = re.sub(r'^(?:Структура|Стиль|Понятность|Длина|Форматирование|Готово)[:\*].*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
     # Удаляем приписки про объем текста
     text = re.sub(r'\(Объем текста:.*?\)', '', text, flags=re.IGNORECASE)
     # Удаляем пустые теги и странные конструкции вроде <i></i>*
