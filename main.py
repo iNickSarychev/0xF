@@ -173,6 +173,10 @@ async def fix_spelling(text: str) -> str:
                     if "TAG" in original_word:
                         continue
                         
+                    # НОВОЕ: Если в слове только латиница (бренды типа OpenAI, Google), не трогаем его
+                    if not any('а' <= c.lower() <= 'я' for c in original_word):
+                        continue
+                        
                     if correction.get("s"):  # Есть варианты замены
                         fixed_word = correction["s"][0]  # Берём первый вариант
                         start_pos = correction["pos"]
