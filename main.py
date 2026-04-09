@@ -139,7 +139,8 @@ async def fix_spelling(text: str) -> str:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 SPELLER_URL,
-                data={"text": clean_text, "lang": "ru"},
+                # options=2 игнорирует слова с цифрами (чтобы не трогать __TAG0__)
+                data={"text": clean_text, "lang": "ru", "options": 2},
                 timeout=aiohttp.ClientTimeout(total=5)
             ) as response:
                 if response.status != 200:
@@ -153,8 +154,13 @@ async def fix_spelling(text: str) -> str:
 
                 # Применяем исправления с конца, чтобы не сбивать индексы
                 for correction in sorted(corrections, key=lambda c: c["pos"], reverse=True):
+                    original_word = correction["word"]
+                    
+                    # Защита: если спеллер всё же придрался к нашему тегу, игнорируем
+                    if "TAG" in original_word:
+                        continue
+                        
                     if correction.get("s"):  # Есть варианты замены
-                        original_word = correction["word"]
                         fixed_word = correction["s"][0]  # Берём первый вариант
                         start_pos = correction["pos"]
                         end_pos = start_pos + correction["len"]
