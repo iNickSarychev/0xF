@@ -121,10 +121,7 @@ class LLMProcessor:
 НОМЕР: [номер_новости]
 IMAGE_QUERY: [english search query for image]
 
-[текст]
-
-Перед отправкой:
-прочитай текст и упрости его ещё на 20%.
+ЗДЕСЬ_СРАЗУ_НАЧИНАЕТСЯ_ТЕКСТ_ПОСТА
 
 ЗАПРЕЩЕНО добавлять в ответ:
 - блоки проверки, чеклисты, самооценку
@@ -176,6 +173,11 @@ IMAGE_QUERY: [english search query for image]
                     article_lines.append(line)
 
             article_text = "\n".join(article_lines).strip()
+            
+            # Удаляем маркер ЗДЕСЬ_СРАЗУ_НАЧИНАЕТСЯ_ТЕКСТ_ПОСТА если модель его напечатала
+            import re
+            article_text = re.sub(r'(?i)ЗДЕСЬ_СРАЗУ_НАЧИНАЕТСЯ_ТЕКСТ_ПОСТА\n?', '', article_text).strip()
+            article_text = re.sub(r'\[текст\]\n?', '', article_text).strip()
 
             # Конвертируем случайный маркдаун в HTML
             article_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', article_text)
