@@ -4,6 +4,8 @@ import logging
 import io
 from PIL import Image
 from ddgs import DDGS
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
@@ -81,6 +83,45 @@ class ImageHandler:
         except Exception as e:
             logger.debug(f"Failed to validate image {url}: {e}")
             return False
+
+    async def extract_article_image(self, article_url: str) -> Optional[str]:
+        """Парсит страницу статьи в поисках качественной обложки (og:image / twitter:image)."""
+        try:
+            timeout = aiohttp.ClientTimeout(total=5)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.5"
+                }
+                async with session.get(article_url, headers=headers) as response:
+                    if response.status != 200:
+                        return None
+                    
+                    html = await response.text()
+                    soup = BeautifulSoup(html, "html.parser")
+                    
+                    # Ищем og:image (самый качественный вариант обложки)
+                    meta_og = soup.find("meta", property="og:image") or soup.find("meta", attrs={"name": "og:image"})
+                    if meta_og and meta_og.get("content"):
+                        img_url = urljoin(article_url, meta_og["content"])
+                        if not self._is_stock_url(img_url) and await self.is_valid_image(img_url):
+                            logger.info(f"High-quality og:image extracted: {img_url}")
+                            return img_url
+                            
+                    # Ищем twitter:image (альтернатива)
+                    meta_tw = soup.find("meta", property="twitter:image") or soup.find("meta", attrs={"name": "twitter:image"})
+                    if meta_tw and meta_tw.get("content"):
+                        img_url = urljoin(article_url, meta_tw["content"])
+                        if not self._is_stock_url(img_url) and await self.is_valid_image(img_url):
+                            logger.info(f"High-quality twitter:image extracted: {img_url}")
+                            return img_url
+                            
+                    logger.info("No valid OpenGraph/Twitter image found in article HTML.")
+                    return None
+        except Exception as e:
+            logger.debug(f"Failed to parse article {article_url} for images: {e}")
+            return None
 
     async def find_best_image(
         self,

@@ -235,15 +235,30 @@ async def generate_and_moderate():
             logger.error("Quality check failed after 2 attempts. Skipping.")
             return
 
-        # Если в RSS нет картинки — ищем через DuckDuckGo
-        if not news_item.get("image") and image_query:
-            logger.info(f"No RSS image. Searching DDG: '{image_query}'")
-            found_image = await image_handler.find_best_image(
-                query=image_query
-            )
-            if found_image:
-                news_item["image"] = found_image
-                logger.info(f"DDG image found: {found_image}")
+        # Умный поиск и проверка картинок
+        valid_image = None
+        
+        # 1. Сначала проверяем картинку из RSS
+        rss_image = news_item.get("image")
+        if rss_image and await image_handler.is_valid_image(rss_image):
+            valid_image = rss_image
+            logger.info(f"Using valid image from RSS: {valid_image}")
+            
+        # 2. Если в RSS нет (или мелкая) - парсим саму новостную статью (og:image)
+        if not valid_image and news_item.get("link"):
+            logger.info("Parsing original article for High-Res image...")
+            extracted_img = await image_handler.extract_article_image(news_item["link"])
+            if extracted_img:
+                valid_image = extracted_img
+                
+        # 3. Если всё равно нет картинок - ищем в сети (DuckDuckGo)
+        if not valid_image and image_query:
+            logger.info(f"Searching DDG: '{image_query}'")
+            valid_image = await image_handler.find_best_image(query=image_query)
+            if valid_image:
+                logger.info(f"DDG image found: {valid_image}")
+             
+        news_item["image"] = valid_image
 
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
@@ -487,14 +502,27 @@ async def cmd_news(message: types.Message):
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
 
-        # Если в RSS нет картинки — ищем через DuckDuckGo
-        if not news_item.get("image") and image_query:
-            await status_msg.edit_text("🖼️ Ищу подходящую картинку...")
-            found_image = await image_handler.find_best_image(
-                query=image_query
-            )
-            if found_image:
-                news_item["image"] = found_image
+        # Умный поиск и проверка картинок
+        valid_image = None
+        
+        # 1. Сначала проверяем картинку из RSS
+        rss_image = news_item.get("image")
+        if rss_image and await image_handler.is_valid_image(rss_image):
+            valid_image = rss_image
+            
+        # 2. Если в RSS нет (или мелкая) - парсим саму новостную статью (og:image)
+        if not valid_image and news_item.get("link"):
+            await status_msg.edit_text("🖼️ Ищу фото в оригинальной статье...")
+            extracted_img = await image_handler.extract_article_image(news_item["link"])
+            if extracted_img:
+                valid_image = extracted_img
+
+        # 3. Если всё равно нет картинок - ищем в сети (DuckDuckGo)
+        if not valid_image and image_query:
+            await status_msg.edit_text("🖼️ Ищу картинку в сети...")
+            valid_image = await image_handler.find_best_image(query=image_query)
+
+        news_item["image"] = valid_image
 
         # Умная обрезка: ищем последнюю точку перед лимитом Telegram
         article_text = article_text.strip()
