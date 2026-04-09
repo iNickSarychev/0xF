@@ -74,7 +74,43 @@ class NewsFetcher:
         epoch_time = time.gmtime(0)
         all_news.sort(key=lambda x: x["published"] if x["published"] else epoch_time, reverse=True)
 
+        # Детекция горячих новостей: если тема в 3+ источниках — trending
+        all_news = self._detect_trending(all_news)
+
         # Возвращаем не более max_count новостей
         return all_news[:max_count]
+
+    def _detect_trending(self, news_list: list[Dict[str, str]]) -> list[Dict[str, str]]:
+        """Помечает новости, которые упоминаются в нескольких источниках."""
+        stop_words = {
+            'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at',
+            'to', 'for', 'of', 'and', 'or', 'with', 'how', 'what', 'why',
+            'its', 'it', 'as', 'by', 'from', 'that', 'this', 'new', 'will',
+            'has', 'have', 'been', 'not', 'but', 'can', 'all', 'just',
+            'и', 'в', 'на', 'с', 'по', 'для', 'из', 'что', 'как', 'это',
+            'не', 'о', 'к', 'за', 'от', 'до', 'но', 'же', 'бы',
+        }
+
+        def extract_keywords(title: str) -> set[str]:
+            """Извлекает значимые слова из заголовка (без стоп-слов)."""
+            words = set(title.lower().split())
+            return {w for w in words if len(w) > 2 and w not in stop_words}
+
+        for i, news_item in enumerate(news_list):
+            keywords = extract_keywords(news_item['title'])
+            similar_count = 0
+            for j, other in enumerate(news_list):
+                if i == j:
+                    continue
+                other_keywords = extract_keywords(other['title'])
+                overlap = keywords & other_keywords
+                if len(overlap) >= 3:
+                    similar_count += 1
+            news_item['trending'] = similar_count >= 2
+            news_item['trending_score'] = similar_count
+
+        # Trending-новости поднимаем наверх, сохраняя порядок по дате внутри групп
+        news_list.sort(key=lambda x: x.get('trending_score', 0), reverse=True)
+        return news_list
 
 news_fetcher = NewsFetcher(Database())

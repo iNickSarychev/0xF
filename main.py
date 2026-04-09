@@ -102,6 +102,23 @@ def clean_llm_output(text: str) -> str:
     return text.strip()
 
 
+def _passes_quality_check(text: str) -> bool:
+    """Проверяет качество сгенерированного текста."""
+    if not text or len(text) < 150:
+        return False
+    # Проверяем на мусорные паттерны
+    garbage_patterns = ['<i></i>', '<b></b>', '***', '---', 'Объем текста:']
+    for pattern in garbage_patterns:
+        if pattern in text:
+            return False
+    # Проверяем, что текст не состоит из одних тегов
+    import re
+    clean_text = re.sub(r'<[^>]+>', '', text).strip()
+    if len(clean_text) < 100:
+        return False
+    return True
+
+
 async def generate_and_moderate():
     """Генерирует статью и отправляет админу на модерацию."""
     try:
@@ -115,16 +132,29 @@ async def generate_and_moderate():
             logger.info("No fresh news found, skipping scheduled job.")
             return
 
-        article_text, news_item = await llm_processor.process_news_batch(
-            news_list
-        )
+        # Генерация с контролем качества (до 2 попыток)
+        article_text = None
+        news_item = None
+        for attempt in range(2):
+            article_text, news_item = await llm_processor.process_news_batch(
+                news_list
+            )
 
-        if not news_item:
-            logger.info("News rejected by model or no news selected.")
+            if not news_item:
+                logger.info("News rejected by model or no news selected.")
+                return
+
+            # Очистка текста от мусора
+            article_text = clean_llm_output(article_text)
+
+            # Проверка качества
+            if _passes_quality_check(article_text):
+                break
+            logger.warning(f"Quality check failed (attempt {attempt + 1}). Regenerating...")
+
+        if not _passes_quality_check(article_text):
+            logger.error("Quality check failed after 2 attempts. Skipping.")
             return
-
-        # Очистка текста от мусора
-        article_text = clean_llm_output(article_text)
 
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
