@@ -15,7 +15,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from config import config
 from database import db
 from services.news_fetcher import news_fetcher
-from services.llm_processor import llm_processor
+from services.editor_agent import editor_agent
+from services.vision_agent import vision_agent
 from services.image_handler import image_handler
 
 # Настройка логирования
@@ -210,7 +211,7 @@ def _passes_quality_check(text: str) -> bool:
 async def generate_and_moderate():
     """Генерирует статью и отправляет админу на модерацию."""
     try:
-        if not await llm_processor.is_available():
+        if not await editor_agent.is_available():
             logger.warning("Ollama is offline. Skipping scheduled generation.")
             return
 
@@ -225,7 +226,7 @@ async def generate_and_moderate():
         news_item = None
         image_query = None
         for attempt in range(2):
-            article_text, news_item, image_query = await llm_processor.process_news_batch(
+            article_text, news_item, image_query = await editor_agent.process_news_batch(
                 news_list
             )
 
@@ -253,7 +254,7 @@ async def generate_and_moderate():
         # 1. Сначала проверяем картинку из RSS
         rss_image = news_item.get("image")
         if rss_image and await image_handler.is_valid_image(rss_image):
-            if await llm_processor.check_image_vision(article_text, rss_image):
+            if await vision_agent.check_image(article_text, rss_image):
                 valid_image = rss_image
                 logger.info(f"Using valid image from RSS: {valid_image}")
             else:
@@ -264,7 +265,7 @@ async def generate_and_moderate():
             logger.info("Parsing original article for High-Res image...")
             extracted_img = await image_handler.extract_article_image(news_item["link"])
             if extracted_img:
-                if await llm_processor.check_image_vision(article_text, extracted_img):
+                if await vision_agent.check_image(article_text, extracted_img):
                     valid_image = extracted_img
                     logger.info(f"Using valid og:image: {valid_image}")
                 else:
@@ -275,7 +276,7 @@ async def generate_and_moderate():
             logger.info(f"Searching DDG: '{image_query}'")
             ddg_img = await image_handler.find_best_image(query=image_query)
             if ddg_img:
-                if await llm_processor.check_image_vision(article_text, ddg_img):
+                if await vision_agent.check_image(article_text, ddg_img):
                     valid_image = ddg_img
                     logger.info(f"DDG image found and approved: {valid_image}")
                 else:
@@ -401,13 +402,18 @@ async def on_reject_teach(callback: types.CallbackQuery):
         article_data = pending_articles.pop(message_id)
         news_item = article_data['news_item']
         
-        # Получаем вектор для обучения
+        # Получаем вектор для обучения через VectorService
+        news_item = article_data['news_item']
         text_for_emb = f"{news_item['title']}. {news_item['summary']}"
         try:
-            emb_resp = await llm_processor.client.embeddings(model='nomic-embed-text', prompt=text_for_emb)
-            vector = emb_resp['embedding']
-            db.save_rejected_vector(text_for_emb[:200], vector)
-            await callback.answer("🎓 Модель успешно обучилась. Подобный смысл больше не появится в ленте!", show_alert=True)
+            from services.vector_service import vector_service
+            # Обновляем новость актуальным вектором (хотя он уже должен быть там)
+            news_item = await vector_service._get_single_embedding(news_item)
+            if news_item.get('vector'):
+                db.save_rejected_vector(text_for_emb[:200], news_item['vector'])
+                await callback.answer("🎓 Модель успешно обучилась. Подобный смысл больше не появится в ленте!", show_alert=True)
+            else:
+                await callback.answer("⚠️ Не удалось получить вектор для обучения.", show_alert=True)
         except Exception as e:
             await callback.answer(f"Ошибка обучения: {e}", show_alert=True)
             
@@ -495,7 +501,7 @@ async def cmd_news(message: types.Message):
     status_msg = await message.answer("🔍 Сканирую AI и tech-источники...")
 
     try:
-        if not await llm_processor.is_available():
+        if not await editor_agent.is_available():
             await status_msg.edit_text(
                 "🖥️ Ollama недоступна (ПК выключен или Ollama не запущена).\n"
                 "Генерация невозможна."
@@ -514,7 +520,7 @@ async def cmd_news(message: types.Message):
             f"🖊️ Найдено: {len(news_list)}. Генерирую статью..."
         )
 
-        article_text, news_item, image_query = await llm_processor.process_news_batch(
+        article_text, news_item, image_query = await editor_agent.process_news_batch(
             news_list
         )
 
