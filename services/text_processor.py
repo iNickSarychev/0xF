@@ -93,6 +93,14 @@ class TextProcessor:
         text = text.strip()
         # Удаляем одинокий номер новости в начале
         text = re.sub(r"^\d{1,2}\s*\n", "", text)
+        # Удаляем заголовки-секции из промпта, которые модель иногда печатает буквально
+        text = re.sub(
+            r"^(?:TL;?DR|Суть(?:\s+для\s+нас)?|So\s+What\??|Финал|"
+            r"Практический\s+юзкейс|Детали|Заголовок)[:\-]?\s*",
+            "",
+            text,
+            flags=re.MULTILINE | re.IGNORECASE,
+        )
         return text.strip()
 
     @staticmethod
