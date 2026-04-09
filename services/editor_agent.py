@@ -20,11 +20,15 @@ class EditorAgent:
         )
 
     async def process_news_batch(
-        self, news_list: List[Dict[str, str]]
+        self, news_list: List[Dict[str, str]], temperature: float | None = None
     ) -> Tuple[str, Any, Optional[str]]:
         """
         Фильтрует новости по векторам и пишет пост.
         Возвращает (текст_статьи, selected_news, image_query).
+        
+        Args:
+            news_list: список новостей для обработки.
+            temperature: температура генерации (None — из Modelfile, 0.9 — творческий режим).
         """
         try:
             # 1. Получаем эмбеддинги параллельно
@@ -74,12 +78,17 @@ class EditorAgent:
         # 4. Генерация
         try:
             prompt = EDITOR_PROMPT.format(news_input=news_input)
+            
+            llm_options: dict = {"num_predict": 2048}
+            if temperature is not None:
+                llm_options["temperature"] = temperature
+            
             response = await self.client.generate(
                 model=self.model,
                 prompt=prompt,
                 stream=False,
                 format="json",
-                options={"num_predict": 2048}
+                options=llm_options,
             )
             
             raw_content = response['response'].strip()

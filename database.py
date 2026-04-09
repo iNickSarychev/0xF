@@ -51,6 +51,14 @@ class Database:
                     value TEXT NOT NULL
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS pending_posts (
+                    message_id INTEGER PRIMARY KEY,
+                    data_json TEXT NOT NULL,
+                    publish_at TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
             conn.commit()
 
             # Всегда синхронизируем ленты из конфига с БД (новые добавятся, старые проигнорируются)
@@ -142,6 +150,37 @@ class Database:
             cursor = conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))
             conn.commit()
             return cursor.rowcount > 0
+
+    # Группа методов для ожидающих публикации постов (Persistence)
+    def save_pending_post(self, message_id: int, data: dict, publish_at: str):
+        import json
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO pending_posts (message_id, data_json, publish_at) VALUES (?, ?, ?)",
+                (message_id, json.dumps(data), publish_at)
+            )
+            conn.commit()
+
+    def get_all_pending_posts(self) -> list[tuple[int, dict, str]]:
+        import json
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("SELECT message_id, data_json, publish_at FROM pending_posts")
+            results = []
+            for row in cursor.fetchall():
+                results.append((row[0], json.loads(row[1]), row[2]))
+            return results
+
+    def remove_pending_post(self, message_id: int):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("DELETE FROM pending_posts WHERE message_id = ?", (message_id,))
+            conn.commit()
+
+    def get_pending_post(self, message_id: int) -> dict | None:
+        import json
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("SELECT data_json FROM pending_posts WHERE message_id = ?", (message_id,))
+            row = cursor.fetchone()
+            return json.loads(row[0]) if row else None
 
     def get_all_sources(self) -> list[tuple[int, str]]:
         with sqlite3.connect(self.db_path) as conn:

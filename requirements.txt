@@ -8,3 +8,4 @@ ddgs>=6.0.0
 Pillow>=10.0.0
 beautifulsoup4>=4.12.0
 numpy>=1.26.0
+async-lru>=2.0.0
