@@ -1,4 +1,5 @@
 import asyncio
+import aiohttp
 import logging
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -94,6 +95,10 @@ def clean_llm_output(text: str) -> str:
     import re
     # Удаляем строку IMAGE_QUERY
     text = re.sub(r'^IMAGE_QUERY:.*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    # Удаляем любые строки с номером новости (НОМЕР, НОВОМБР, SELECTED и прочие опечатки)
+    text = re.sub(r'^.*(?:НОМЕР|НОМБР|НОВОМБР|SELECTED|NUMBER)\s*[:\-]\s*\[?\d+\]?.*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    # Удаляем одинокие числа на отдельной строке (остатки номера)
+    text = re.sub(r'^\s*\d{1,2}\s*$', '', text, flags=re.MULTILINE)
     # Удаляем блоки самопроверки модели: [Проверка...], [Checklist...] и всё после них
     text = re.sub(r'\[(?:Проверка|Checklist|Check|Самопроверка).*', '', text, flags=re.DOTALL | re.IGNORECASE)
     # Удаляем отдельные строки-метрики: "Структура:*", "Стиль:*", "Длина:*" и т.п.
@@ -110,6 +115,61 @@ def clean_llm_output(text: str) -> str:
     # Удаляем одинокий номер новости в начале текста (1-2 цифры на отдельной строке)
     text = re.sub(r'^\d{1,2}\s*\n', '', text)
     return text.strip()
+
+
+async def fix_spelling(text: str) -> str:
+    """Исправляет опечатки через Yandex.Speller API (бесплатный, без ключа)."""
+    import re
+    SPELLER_URL = "https://speller.yandex.net/services/spellservice.json/checkText"
+
+    # Извлекаем HTML-теги, чтобы спеллер их не трогал
+    html_tags = {}
+    tag_counter = 0
+
+    def replace_tag(match):
+        nonlocal tag_counter
+        placeholder = f"__TAG{tag_counter}__"
+        html_tags[placeholder] = match.group(0)
+        tag_counter += 1
+        return placeholder
+
+    clean_text = re.sub(r'<[^>]+>', replace_tag, text)
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                SPELLER_URL,
+                data={"text": clean_text, "lang": "ru"},
+                timeout=aiohttp.ClientTimeout(total=5)
+            ) as response:
+                if response.status != 200:
+                    logger.warning(f"Speller API returned {response.status}")
+                    return text
+
+                corrections = await response.json()
+
+                if not corrections:
+                    return text
+
+                # Применяем исправления с конца, чтобы не сбивать индексы
+                for correction in sorted(corrections, key=lambda c: c["pos"], reverse=True):
+                    if correction.get("s"):  # Есть варианты замены
+                        original_word = correction["word"]
+                        fixed_word = correction["s"][0]  # Берём первый вариант
+                        start_pos = correction["pos"]
+                        end_pos = start_pos + correction["len"]
+                        clean_text = clean_text[:start_pos] + fixed_word + clean_text[end_pos:]
+                        logger.info(f"Spelling fix: '{original_word}' -> '{fixed_word}'")
+
+                # Восстанавливаем HTML-теги
+                for placeholder, tag in html_tags.items():
+                    clean_text = clean_text.replace(placeholder, tag)
+
+                return clean_text
+
+    except Exception as e:
+        logger.warning(f"Speller API error: {e}")
+        return text  # Фоллбэк — возвращаем текст как есть
 
 
 def _passes_quality_check(text: str) -> bool:
@@ -157,6 +217,8 @@ async def generate_and_moderate():
 
             # Очистка текста от мусора
             article_text = clean_llm_output(article_text)
+            # Применяем исправление опечаток
+            article_text = await fix_spelling(article_text)
 
             # Проверка качества
             if _passes_quality_check(article_text):
@@ -413,6 +475,8 @@ async def cmd_news(message: types.Message):
 
         # Очистка текста от мусора
         article_text = clean_llm_output(article_text)
+        # Применяем исправление опечаток
+        article_text = await fix_spelling(article_text)
 
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
