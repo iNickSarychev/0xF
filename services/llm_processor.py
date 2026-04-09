@@ -209,7 +209,8 @@ IMAGE_QUERY: [english search query for image]
     async def check_image_vision(self, post_text: str, image_url: str) -> bool:
         """Проверяет релевантность картинки посту через LLaVA Vision."""
         if not await self.is_available():
-            return True # Пропускаем, если Ollama выключена
+            logger.warning("Vision check: Ollama is unavailable. Skipping image for safety.")
+            return False # Если ИИ-проверка недоступна, лучше не слать картинку, чем слать мусор
             
         import aiohttp
         import base64
@@ -232,8 +233,10 @@ IMAGE_QUERY: [english search query for image]
         prompt = (
             "You are a strict editorial assistant. Look at this image.\n"
             f"Here is a summary of the news article:\n{post_text}\n\n"
-            "Does this image directly depict the event, people, or concepts mentioned in the text? "
-            "Reject abstract logos, memes, or completely unrelated graphics. "
+            "CRITICAL RULES:\n"
+            "1. Does this image directly depict the event, people, or concepts mentioned in the text?\n"
+            "2. REJECT any images with logos or buildings of companies NOT mentioned in the text (e.g., if text is about Netflix and image shows VMware logo, answer NO).\n"
+            "3. REJECT abstract logos, memes, or completely unrelated graphics.\n"
             "Answer ONLY with YES or NO."
         )
         logger.debug(f"\n========== VISION PROMPT ==========\n{prompt}\n===================================")
@@ -251,7 +254,7 @@ IMAGE_QUERY: [english search query for image]
             return "YES" in answer
         except Exception as e:
             logger.error(f"Vision model generation error: {e}")
-            return True  # Фоллбэк — если зрения нет или оно сломалось, пропускаем картинку
+            return False  # Фоллбэк — если зрение сломалось, лучше не слать картинку совсем.
 
 
 llm_processor = LLMProcessor()
