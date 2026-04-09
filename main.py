@@ -129,11 +129,18 @@ async def generate_and_moderate():
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
 
-        # Форматируем финальный текст: ограничение и подпись канала
-        final_text = article_text.strip()
-        
-        # Добавляем фирменную подпись (без источника)
-        final_text += f"\n\n<b>@AxFUTURE</b>"
+        # Умная обрезка: ищем последнюю точку перед лимитом Telegram
+        article_text = article_text.strip()
+        if len(article_text) > 3700:
+            truncated = article_text[:3700]
+            last_period = truncated.rfind('.')
+            if last_period > 3000:
+                article_text = truncated[:last_period + 1]
+            else:
+                article_text = truncated + "..."
+
+        # Добавляем фирменную подпись
+        final_text = article_text + f"\n\n<b>@AxFUTURE</b>"
 
         # Отправляем админу с кнопками модерации
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -353,11 +360,40 @@ async def cmd_news(message: types.Message):
             await status_msg.edit_text("🤷 За последние 24 часа не нашлось значимых не отклоненных новостей.")
             return
 
+        # Очистка текста от мусора
+        article_text = clean_llm_output(article_text)
+
         source_link = news_item.get("link", "")
         db.save_news(news_item['title'], source_link)
 
-        # Форматируем текст
-        final_text = article_text.strip() + f"\n\n<b>@AxFUTURE</b>"
+        # Умная обрезка: ищем последнюю точку перед лимитом Telegram
+        article_text = article_text.strip()
+        if len(article_text) > 3700:
+            truncated = article_text[:3700]
+            last_period = truncated.rfind('.')
+            if last_period > 3000:
+                article_text = truncated[:last_period + 1]
+            else:
+                article_text = truncated + "..."
+
+        # Добавляем фирменную подпись
+        final_text = article_text + f"\n\n<b>@AxFUTURE</b>"
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Опубликовать", callback_data="approve"
+                ),
+                InlineKeyboardButton(
+                    text="❌ Отклонить", callback_data="reject"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🎓 Отклонить (Обучить)", callback_data="reject_teach"
+                )
+            ]
+        ])
 
         try:
             if news_item.get("image"):
