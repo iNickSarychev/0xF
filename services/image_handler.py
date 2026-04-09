@@ -16,7 +16,9 @@ WATERMARK_DOMAINS = [
     "shutterstock.com", "gettyimages.com", "istockphoto.com",
     "dreamstime.com", "123rf.com", "depositphotos.com",
     "alamy.com", "bigstockphoto.com", "canstockphoto.com",
-    "stock.adobe.com", "photospin.com",
+    "stock.adobe.com", "photospin.com", "pngtree.com",
+    "freepik.com", "vecteezy.com", "pxfuel.com", "piqsels.com",
+    "wallpaperflare.com"
 ]
 
 

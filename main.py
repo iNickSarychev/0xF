@@ -95,8 +95,8 @@ def clean_llm_output(text: str) -> str:
     import re
     # Удаляем строку IMAGE_QUERY
     text = re.sub(r'^IMAGE_QUERY:.*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
-    # Удаляем любые строки с номером новости (НОМЕР, НОВОМБР, SELECTED и прочие опечатки)
-    text = re.sub(r'^.*(?:НОМЕР|НОМБР|НОВОМБР|SELECTED|NUMBER)\s*[:\-]\s*\[?\d+\]?.*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
+    # Удаляем любые строки с номером новости (НОМЕР, НОВОМБР, SELECTED, NOMEP и прочие опечатки)
+    text = re.sub(r'^.*(?:НОМЕР|НОМБР|НОВОМБР|SELECTED|NUMBER|NOMEP)\s*[:\-]?\s*\[?\d+\]?.*$', '', text, flags=re.MULTILINE | re.IGNORECASE)
     # Удаляем одинокие числа на отдельной строке (остатки номера)
     text = re.sub(r'^\s*\d{1,2}\s*$', '', text, flags=re.MULTILINE)
     # Удаляем блоки самопроверки модели: [Проверка...], [Checklist...] и всё после них
