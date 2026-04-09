@@ -53,11 +53,10 @@ class Database:
             """)
             conn.commit()
 
-            cursor = conn.execute("SELECT COUNT(*) FROM sources")
-            if cursor.fetchone()[0] == 0:
-                for feed in config.RSS_FEEDS:
-                    conn.execute("INSERT OR IGNORE INTO sources (url) VALUES (?)", (feed,))
-                conn.commit()
+            # Всегда синхронизируем ленты из конфига с БД (новые добавятся, старые проигнорируются)
+            for feed in config.RSS_FEEDS:
+                conn.execute("INSERT OR IGNORE INTO sources (url) VALUES (?)", (feed,))
+            conn.commit()
                 
             cursor = conn.execute("SELECT COUNT(*) FROM settings WHERE key='theme'")
             if cursor.fetchone()[0] == 0:
