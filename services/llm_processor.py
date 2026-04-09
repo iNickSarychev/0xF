@@ -222,6 +222,7 @@ IMAGE_QUERY: [english search query for image]
             "Reject abstract logos, memes, or completely unrelated graphics. "
             "Answer ONLY with YES or NO."
         )
+        logger.debug(f"\n========== VISION PROMPT ==========\n{prompt}\n===================================")
         try:
             response = await self.client.generate(
                 model="llava:7b",
@@ -231,6 +232,7 @@ IMAGE_QUERY: [english search query for image]
                 options={"num_predict": 10, "temperature": 0.1}
             )
             answer = response['response'].strip().upper()
+            logger.debug(f"\n========== VISION RAW OUTPUT ==========\n{answer}\n=======================================")
             logger.info(f"Vision model verdict for image {image_url}: {answer}")
             return "YES" in answer
         except Exception as e:
