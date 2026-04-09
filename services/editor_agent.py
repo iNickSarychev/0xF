@@ -7,7 +7,7 @@ from typing import List, Dict, Tuple, Any, Optional
 from config import config
 from database import db
 from services.vector_service import vector_service
-from services.prompts import EDITOR_PROMPT
+from services.prompts import EDITOR_PROMPT, get_random_structure
 from services.critic_agent import critic_agent
 
 logger = logging.getLogger(__name__)
@@ -78,7 +78,12 @@ class EditorAgent:
 
         # 4. Генерация
         try:
-            prompt = EDITOR_PROMPT.format(news_input=news_input)
+            chosen_structure = get_random_structure()
+            logger.info(f"Post structure: {chosen_structure[:60]}...")
+            prompt = EDITOR_PROMPT.format(
+                structure_block=chosen_structure,
+                news_input=news_input,
+            )
             
             llm_options: dict = {"num_predict": 2048}
             if temperature is not None:
