@@ -1,116 +1,190 @@
-import feedparser
-import time
+import asyncio
 import calendar
-from typing import Optional, Dict
+import logging
+import re
+import time
+from typing import Dict
+
+import aiohttp
+import feedparser
+
 from config import config
 from database import Database
 
+logger = logging.getLogger(__name__)
+
+# Домены приоритетных источников (AI-лаборатории).
+# Новости с этих доменов получают бонус к trending_score.
+PRIORITY_DOMAINS: dict[str, int] = {
+    "huggingface.co": 2,
+    "blog.google": 2,
+    "openai.com": 3,
+    "deepmind.google": 3,
+    "ai.meta.com": 2,
+}
+
+# Стоп-слова для детекции трендов (EN + RU)
+_STOP_WORDS: set[str] = {
+    "the", "a", "an", "is", "are", "was", "were", "in", "on", "at",
+    "to", "for", "of", "and", "or", "with", "how", "what", "why",
+    "its", "it", "as", "by", "from", "that", "this", "new", "will",
+    "has", "have", "been", "not", "but", "can", "all", "just",
+    "и", "в", "на", "с", "по", "для", "из", "что", "как", "это",
+    "не", "о", "к", "за", "от", "до", "но", "же", "бы",
+}
+
+# Regex для очистки пунктуации из заголовков (фикс бага AI. ≠ AI)
+_PUNCTUATION_RE = re.compile(r"[^\w\s]", re.UNICODE)
+
+
+def _extract_keywords(title: str) -> set[str]:
+    """Извлекает значимые слова из заголовка, очищая пунктуацию."""
+    cleaned = _PUNCTUATION_RE.sub("", title.lower())
+    return {word for word in cleaned.split() if len(word) > 2 and word not in _STOP_WORDS}
+
+
+def _get_source_bonus(feed_url: str) -> int:
+    """Возвращает бонус к trending_score для приоритетного источника."""
+    for domain, bonus in PRIORITY_DOMAINS.items():
+        if domain in feed_url:
+            return bonus
+    return 0
+
+
+def _extract_image_from_entry(entry: feedparser.FeedParserDict) -> str | None:
+    """
+    Выдёргивает URL картинки из RSS-записи.
+    Стратегии: enclosures → media:content → media:thumbnail → <img> в HTML.
+    """
+    # 1. Enclosures
+    if entry.get("enclosures"):
+        for enc in entry.enclosures:
+            if enc.get("type", "").startswith("image/"):
+                return enc.get("url")
+
+    # 2. media:content / media:thumbnail (через namespaces)
+    media_content = entry.get("media_content")
+    if media_content and isinstance(media_content, list):
+        return media_content[0].get("url")
+
+    media_thumbnail = entry.get("media_thumbnail")
+    if media_thumbnail and isinstance(media_thumbnail, list):
+        return media_thumbnail[0].get("url")
+
+    # 3. <img> в summary/description (фоллбэк)
+    content = entry.get("summary", entry.get("description", ""))
+    img_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', content)
+    if img_match:
+        return img_match.group(1)
+
+    return None
+
+
 class NewsFetcher:
-    def __init__(self, db: Database):
+    """Асинхронный сборщик новостей из RSS-лент."""
+
+    def __init__(self, db: Database) -> None:
         self.db = db
 
-    def get_news_batch(self, max_count: int = 10) -> list[Dict[str, str]]:
+    async def get_news_batch(self, max_count: int = 10) -> list[dict[str, str]]:
         """
         Собирает пачку свежих новостей из всех лент.
+        RSS-ленты скачиваются параллельно через aiohttp,
+        затем парсятся feedparser-ом.
         """
-        all_news = []
-        current_time = time.time()
-        
         sources = [url for _, url in self.db.get_all_sources()]
 
-        for feed_url in sources:
-            try:
-                feed = feedparser.parse(feed_url)
-                for entry in feed.entries:
-                    # Пропускаем новости без даты или старее 24 часов
-                    pub_parsed = entry.get("published_parsed")
-                    if not pub_parsed:
-                        continue
-                    
-                    # feedparser.published_parsed - это UTC, используем calendar.timegm
-                    pub_epoch = calendar.timegm(pub_parsed)
-                    if (current_time - pub_epoch) > 86400:
-                        continue
+        # Скачиваем все ленты параллельно (неблокирующий I/O)
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=15)
+        ) as session:
+            tasks = [self._fetch_feed(session, url) for url in sources]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                    # Проверяем, есть ли уже такая новость в БД
-                    if not self.db.is_news_sent(entry.title, entry.link):
-                        # Ищем картинку
-                        image_url = None
-                        
-                        # 1. Проверяем enclosures
-                        if entry.get("enclosures"):
-                            for enc in entry.enclosures:
-                                if enc.get("type", "").startswith("image/"):
-                                    image_url = enc.get("url")
-                                    break
-                        
-                        # 2. Проверяем media:content или media:thumbnail (через namespaces)
-                        if not image_url:
-                            media_content = entry.get("media_content")
-                            if media_content and isinstance(media_content, list):
-                                image_url = media_content[0].get("url")
-                            elif entry.get("media_thumbnail"):
-                                image_url = entry.get("media_thumbnail")[0].get("url")
-                        
-                        # 3. Достаем из текста (превью в summary/description)
-                        if not image_url:
-                            import re
-                            content = entry.get("summary", entry.get("description", ""))
-                            img_match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', content)
-                            if img_match:
-                                image_url = img_match.group(1)
+        current_time = time.time()
+        all_news: list[dict] = []
 
-                        all_news.append({
-                            "title": entry.title,
-                            "summary": entry.get("summary", entry.get("description", "")),
-                            "link": entry.link,
-                            "image": image_url,
-                            "published": pub_parsed
-                        })
-            except Exception as e:
-                print(f"Error parsing {feed_url}: {e}")
+        for feed_url, result in zip(sources, results):
+            if isinstance(result, Exception):
+                logger.warning(f"Failed to fetch {feed_url}: {result}")
+                continue
 
-        # Сортируем по дате публикации (от новых к старым)
-        epoch_time = time.gmtime(0)
-        all_news.sort(key=lambda x: x["published"] if x["published"] else epoch_time, reverse=True)
+            feed = feedparser.parse(result)
+            source_bonus = _get_source_bonus(feed_url)
 
-        # Детекция горячих новостей: если тема в 3+ источниках — trending
+            for entry in feed.entries:
+                news_item = self._parse_entry(entry, current_time, source_bonus)
+                if news_item:
+                    all_news.append(news_item)
+
+        # Сортируем по дате: от новых к старым
+        epoch_zero = time.gmtime(0)
+        all_news.sort(
+            key=lambda item: item["published"] if item["published"] else epoch_zero,
+            reverse=True,
+        )
+
+        # Детекция горячих новостей
         all_news = self._detect_trending(all_news)
 
-        # Возвращаем не более max_count новостей
         return all_news[:max_count]
 
-    def _detect_trending(self, news_list: list[Dict[str, str]]) -> list[Dict[str, str]]:
-        """Помечает новости, которые упоминаются в нескольких источниках."""
-        stop_words = {
-            'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at',
-            'to', 'for', 'of', 'and', 'or', 'with', 'how', 'what', 'why',
-            'its', 'it', 'as', 'by', 'from', 'that', 'this', 'new', 'will',
-            'has', 'have', 'been', 'not', 'but', 'can', 'all', 'just',
-            'и', 'в', 'на', 'с', 'по', 'для', 'из', 'что', 'как', 'это',
-            'не', 'о', 'к', 'за', 'от', 'до', 'но', 'же', 'бы',
+    @staticmethod
+    async def _fetch_feed(session: aiohttp.ClientSession, feed_url: str) -> str:
+        """Скачивает RSS-ленту асинхронно, возвращает сырой XML-текст."""
+        async with session.get(feed_url) as response:
+            response.raise_for_status()
+            return await response.text()
+
+    def _parse_entry(
+        self,
+        entry: feedparser.FeedParserDict,
+        current_time: float,
+        source_bonus: int,
+    ) -> dict | None:
+        """Парсит одну запись RSS. Возвращает None, если запись невалидна."""
+        pub_parsed = entry.get("published_parsed")
+        if not pub_parsed:
+            return None
+
+        pub_epoch = calendar.timegm(pub_parsed)
+        if (current_time - pub_epoch) > 86400:
+            return None
+
+        if self.db.is_news_sent(entry.title, entry.link):
+            return None
+
+        return {
+            "title": entry.title,
+            "summary": entry.get("summary", entry.get("description", "")),
+            "link": entry.link,
+            "image": _extract_image_from_entry(entry),
+            "published": pub_parsed,
+            "source_bonus": source_bonus,
         }
 
-        def extract_keywords(title: str) -> set[str]:
-            """Извлекает значимые слова из заголовка (без стоп-слов)."""
-            words = set(title.lower().split())
-            return {w for w in words if len(w) > 2 and w not in stop_words}
-
+    @staticmethod
+    def _detect_trending(news_list: list[dict]) -> list[dict]:
+        """Помечает новости, которые упоминаются в нескольких источниках."""
         for i, news_item in enumerate(news_list):
-            keywords = extract_keywords(news_item['title'])
+            keywords = _extract_keywords(news_item["title"])
             similar_count = 0
+
             for j, other in enumerate(news_list):
                 if i == j:
                     continue
-                other_keywords = extract_keywords(other['title'])
+                other_keywords = _extract_keywords(other["title"])
                 overlap = keywords & other_keywords
                 if len(overlap) >= 3:
                     similar_count += 1
-            news_item['trending'] = similar_count >= 2
-            news_item['trending_score'] = similar_count
 
-        # Trending-новости поднимаем наверх, сохраняя порядок по дате внутри групп
-        news_list.sort(key=lambda x: x.get('trending_score', 0), reverse=True)
+            news_item["trending"] = similar_count >= 2
+            # Итоговый вес учитывает и количество совпадений, и приоритет источника
+            news_item["trending_score"] = similar_count + news_item.get("source_bonus", 0)
+
+        # Trending и приоритетные наверх, внутри — по дате
+        news_list.sort(key=lambda item: item.get("trending_score", 0), reverse=True)
         return news_list
+
 
 news_fetcher = NewsFetcher(Database())

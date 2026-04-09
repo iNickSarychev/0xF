@@ -332,7 +332,7 @@ async def generate_and_moderate() -> None:
             logger.warning("Ollama is offline. Skipping.")
             return
 
-        news_list = news_fetcher.get_news_batch(max_count=15)
+        news_list = await news_fetcher.get_news_batch(max_count=15)
         if not news_list:
             logger.info("No fresh news. Skipping.")
             return
@@ -648,7 +648,7 @@ async def cmd_news(message: types.Message) -> None:
             )
             return
 
-        news_list = news_fetcher.get_news_batch(max_count=15)
+        news_list = await news_fetcher.get_news_batch(max_count=15)
         if not news_list:
             await status_msg.edit_text(
                 "🤷 За последние 24 часа не нашлось значимых новостей."
