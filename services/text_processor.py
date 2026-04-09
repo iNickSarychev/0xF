@@ -94,11 +94,21 @@ class TextProcessor:
         # Удаляем одинокий номер новости в начале
         text = re.sub(r"^\d{1,2}\s*\n", "", text)
         # Удаляем заголовки-секции из промпта, которые модель иногда печатает буквально
+        # Русские варианты
         text = re.sub(
             r"^(?:TL;?DR|Суть(?:\s+для\s+нас)?|So\s+What\??|Финал|"
             r"Практический\s+юзкейс|Детали|Заголовок|Контекст|Вердикт|"
             r"Киллер[\-\s]?фичи|Ложка\s+дегтя|Ограничения|"
-            r"Победители\s+и\s+проигравшие|Итог)[:\-]?\s*",
+            r"Победители|Проигравшие|Итог)[:\-]?\s*",
+            "",
+            text,
+            flags=re.MULTILINE | re.IGNORECASE,
+        )
+        # Английские варианты (промпты теперь на EN)
+        text = re.sub(
+            r"^(?:Winners|Losers|Verdict|Context|Catch|Bottom\s+line|"
+            r"Killer\s+features|Why\s+it\s+matters|Practical\s+use\s+case|"
+            r"Closing(?:\s+line)?|Limitations|Details|Headline)[:\-]?\s*",
             "",
             text,
             flags=re.MULTILINE | re.IGNORECASE,
