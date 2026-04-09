@@ -314,14 +314,17 @@ async def generate_and_moderate():
                     request_timeout=60
                 )
         except Exception as e:
-            logger.error(f"Error sending moderation message: {e}")
-            sent_msg = await bot.send_message(
-                config.ADMIN_CHAT_ID,
-                f"📝 На модерацию:\n\n{final_text}",
-                reply_markup=keyboard,
-                parse_mode=None,
-                request_timeout=60
-            )
+            logger.error(f"Error sending moderation message (likely photo issue): {e}")
+            try:
+                sent_msg = await bot.send_message(
+                    config.ADMIN_CHAT_ID,
+                    f"📝 <b>На модерацию (без превью фото):</b>\n\n{final_text}",
+                    reply_markup=keyboard,
+                    request_timeout=60
+                )
+            except Exception as e2:
+                logger.error(f"Critical error sending moderation: {e2}")
+                return
 
         # Сохраняем статью и запускаем таймер автопубликации
         pending_articles[sent_msg.message_id] = {
@@ -568,9 +571,14 @@ async def cmd_news(message: types.Message):
                 await status_msg.edit_text(final_text, reply_markup=keyboard, request_timeout=60)
                 status_msg_id = status_msg.message_id
         except Exception as e:
-            logger.error(f"Error sending manual news: {e}")
-            await message.answer(final_text, reply_markup=keyboard, parse_mode=None)
-            return
+            logger.error(f"Error sending manual news (likely photo issue): {e}")
+            try:
+                sent_msg = await message.answer(final_text, reply_markup=keyboard)
+                status_msg_id = sent_msg.message_id
+            except Exception as e2:
+                logger.error(f"Critical HTML formatting error on manual send: {e2}")
+                await message.answer("❌ Внутренняя ошибка форматирования поста.")
+                return
             
         pending_articles[status_msg_id] = {
             'text': final_text, 
