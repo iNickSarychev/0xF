@@ -505,7 +505,10 @@ async def cmd_news(message: types.Message):
         )
 
         if not news_item:
-            await status_msg.edit_text("🤷 За последние 24 часа не нашлось значимых не отклоненных новостей.")
+            if "Ошибка" in article_text:
+                await status_msg.edit_text(f"🚨 Ошибка LLM: {article_text}")
+            else:
+                await status_msg.edit_text("🤷 За последние 24 часа не нашлось значимых не отклоненных новостей.")
             return
 
         # Очистка текста от мусора
