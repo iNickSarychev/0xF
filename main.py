@@ -164,9 +164,7 @@ async def generate_and_moderate():
         if not news_item.get("image") and image_query:
             logger.info(f"No RSS image. Searching DDG: '{image_query}'")
             found_image = await image_handler.find_best_image(
-                query=image_query,
-                llm_processor=llm_processor,
-                post_text=article_text
+                query=image_query
             )
             if found_image:
                 news_item["image"] = found_image
@@ -416,9 +414,7 @@ async def cmd_news(message: types.Message):
         if not news_item.get("image") and image_query:
             await status_msg.edit_text("🖼️ Ищу подходящую картинку...")
             found_image = await image_handler.find_best_image(
-                query=image_query,
-                llm_processor=llm_processor,
-                post_text=article_text
+                query=image_query
             )
             if found_image:
                 news_item["image"] = found_image

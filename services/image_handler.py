@@ -52,13 +52,11 @@ class ImageHandler:
     async def find_best_image(
         self, 
         query: str, 
-        llm_processor: any, 
-        post_text: str,
         max_search_results: int = 5
     ) -> Optional[str]:
         """
-        Ищет до 5 картинок, проверяет их размер и релевантность через LLM.
-        Возвращает первую подошедшую.
+        Ищет до 5 картинок, проверяет размер.
+        Возвращает первую валидную.
         """
         image_urls = await self.search_images(query, max_results=max_search_results)
         
@@ -67,16 +65,14 @@ class ImageHandler:
             logger.info("No images found, trying fallback query...")
             image_urls = await self.search_images(f"{query} news photo", max_results=3)
 
+        logger.info(f"DDG returned {len(image_urls)} image URLs for '{query}'")
+
         for url in image_urls:
-            # 1. Проверка размера
-            if not await self.is_valid_image(url):
-                continue
-            
-            # 2. Проверка релевантности через LLM
-            if await llm_processor.check_image_relevance(post_text, url):
+            if await self.is_valid_image(url):
                 logger.info(f"Image selected: {url}")
                 return url
-        
+            
+        logger.warning(f"No valid images found for query '{query}'")
         return None
 
 image_handler = ImageHandler()
