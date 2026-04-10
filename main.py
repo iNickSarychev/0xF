@@ -12,7 +12,7 @@ from aiogram.utils.markdown import hbold
 from aiogram.types import (
     ReplyKeyboardMarkup, KeyboardButton,
     InlineKeyboardMarkup, InlineKeyboardButton,
-    ForceReply
+    ForceReply, LinkPreviewOptions
 )
 from aiogram.client.default import DefaultBotProperties
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -127,31 +127,16 @@ async def _register_llm_failure(reason: str) -> None:
 
 # ─── Публикация на канал ──────────────────────────────────────────────────────
 async def publish_to_channel(article_text: str, image_url: str = None) -> None:
-    """Публикует статью на канале с фото или текстом."""
+    """Публикует статью на канале с фото или текстом (умная обработка лимитов)."""
     # Последний рубеж защиты: балансировка HTML и фильтр мусора
     article_text = text_processor.balance_html_tags(article_text)
     article_text = text_processor.hallucination_filter(article_text)
 
     try:
-        if image_url:
-            await bot.send_photo(
-                config.CHANNEL_ID,
-                photo=image_url,
-                caption=article_text,
-                request_timeout=60,
-            )
-        else:
-            await bot.send_message(
-                config.CHANNEL_ID, article_text, request_timeout=60
-            )
+        await _send_msg_with_photo_safer(config.CHANNEL_ID, article_text, image_url)
         logger.info("Article published to channel.")
     except Exception as exc:
         logger.error(f"Failed to publish to channel: {exc}")
-        # Фоллбэк: пробуем без фото
-        try:
-            await bot.send_message(
-                config.CHANNEL_ID, article_text, request_timeout=60
-            )
         except Exception as fallback_exc:
             logger.error(f"Fallback publish also failed: {fallback_exc}")
 
@@ -263,6 +248,49 @@ async def _find_valid_image(news_item: dict, image_query: str | None) -> str | N
     return None
 
 
+async def _send_msg_with_photo_safer(
+    chat_id: int | str, 
+    text: str, 
+    image_url: str | None, 
+    reply_markup: InlineKeyboardMarkup | None = None
+) -> types.Message:
+    """
+    Умный отправитель: если текст > 1024 символов, использует LinkPreview для картинки.
+    Это обходит лимит Telegram на длину подписи к фото.
+    """
+    if not image_url:
+        return await bot.send_message(
+            chat_id, text, reply_markup=reply_markup, request_timeout=60
+        )
+
+    if len(text) <= 1024:
+        try:
+            return await bot.send_photo(
+                chat_id,
+                photo=image_url,
+                caption=text,
+                reply_markup=reply_markup,
+                request_timeout=60,
+            )
+        except Exception as exc:
+            logger.warning(f"send_photo failed, falling back to message: {exc}")
+            # Если само фото не грузится (ссылка битая), падаем на текст с превью
+            pass
+
+    # Для длинных текстов или при сбое send_photo
+    return await bot.send_message(
+        chat_id,
+        text,
+        reply_markup=reply_markup,
+        link_preview_options=LinkPreviewOptions(
+            url=image_url,
+            show_above_text=True,
+            prefer_large_media=True
+        ),
+        request_timeout=60
+    )
+
+
 async def _send_to_admin(
     chat_id: int,
     final_text: str,
@@ -270,25 +298,18 @@ async def _send_to_admin(
     keyboard: InlineKeyboardMarkup,
     header: str,
 ) -> types.Message | None:
+
     """
     Отправляет сообщение на модерацию.
-    При ошибке фото — падает на текст. Возвращает None при критическом сбое.
     """
     try:
-        if image_url:
-            return await bot.send_photo(
-                chat_id,
-                photo=image_url,
-                caption=f"{header}\n\n{final_text}",
-                reply_markup=keyboard,
-                request_timeout=60,
-            )
-        return await bot.send_message(
-            chat_id,
-            f"{header}\n\n{final_text}",
-            reply_markup=keyboard,
-            request_timeout=60,
+        full_text = f"{header}\n\n{final_text}"
+        return await _send_msg_with_photo_safer(
+            chat_id, full_text, image_url, keyboard
         )
+    except Exception as exc:
+        logger.error(f"Error sending to admin: {exc}")
+        return None
     except Exception as exc:
         logger.error(f"Error sending to admin (likely photo issue): {exc}")
         try:
@@ -722,25 +743,12 @@ async def cmd_news(message: types.Message) -> None:
         keyboard = _build_moderation_keyboard(source_url=source_link)
 
         try:
-            if valid_image:
-                await status_msg.delete()
-                sent_msg = await bot.send_photo(
-                    message.chat.id,
-                    photo=valid_image,
-                    caption=final_text,
-                    reply_markup=keyboard,
-                    request_timeout=60,
-                )
-                status_msg_id = sent_msg.message_id
-            else:
-                try:
-                    await status_msg.edit_text(
-                        final_text, reply_markup=keyboard, request_timeout=60
-                    )
-                except Exception as e:
-                    if "message is not modified" not in str(e):
-                        raise e
-                status_msg_id = status_msg.message_id
+            await status_msg.delete()
+            sent_msg = await _send_msg_with_photo_safer(
+                message.chat.id, final_text, valid_image, keyboard
+            )
+            status_msg_id = sent_msg.message_id
+        except Exception as exc:
         except Exception as exc:
             logger.error(f"Error sending manual news: {exc}")
             try:
