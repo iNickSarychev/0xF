@@ -107,12 +107,12 @@ class EditorAgent:
             f"POPULARITY SCORE: {score}/10\n"
             f"TRENDING: {trending_mark}\n"
             f"TITLE: {selected_news['title']}\n"
-            f"SOURCE SUMMARY: {selected_news['summary'][:1200]}\n"
+            f"SOURCE SUMMARY: {selected_news['summary'][:800]}\n"
         )
         logger.debug(f"EDITOR_INPUT_NEWS:\n{news_input}")
 
         # 5. Выбор Golden Samples (2 случайных примера)
-        samples = random.sample(GOLDEN_SAMPLES, 2)
+        samples = random.sample(GOLDEN_SAMPLES, 1)
         samples_text = "\n\n---\n\n".join(samples)
 
         # 6. Генерация
