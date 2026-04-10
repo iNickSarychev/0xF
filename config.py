@@ -8,6 +8,7 @@ class Config:
     BOT_TOKEN = os.getenv("BOT_TOKEN")
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "0xf-writer")
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "1m")
     DB_PATH = os.getenv("DB_PATH", "news.db")
     CHANNEL_ID = os.getenv("CHANNEL_ID", "@AxFUTURE")
     ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "341481395"))

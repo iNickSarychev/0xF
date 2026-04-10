@@ -21,12 +21,13 @@ class LLMGateway:
             cls._instance = super(LLMGateway, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, host: str = config.OLLAMA_BASE_URL, timeout: float = 300.0):
+    def __init__(self, host: str = config.OLLAMA_BASE_URL, timeout: float = 300.0, keep_alive: str = config.OLLAMA_KEEP_ALIVE):
         if not hasattr(self, 'initialized'):
             self.client = ollama.AsyncClient(
                 host=host,
                 timeout=httpx.Timeout(timeout, connect=10.0)
             )
+            self.default_keep_alive = keep_alive
             self.initialized = True
 
     async def generate(
@@ -37,7 +38,7 @@ class LLMGateway:
         images: Optional[List[str]] = None,
         format: str = "",
         options: Optional[Dict[str, Any]] = None,
-        keep_alive: str = "5m"
+        keep_alive: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Выполняет запрос к Ollama через семафор.
@@ -61,7 +62,7 @@ class LLMGateway:
                     images=images,
                     format=format,
                     options=base_options,
-                    keep_alive=keep_alive
+                    keep_alive=keep_alive or self.default_keep_alive
                 )
                 logger.debug(f"LLM [{model}] - Raw Response snippet: {response.get('response', '')[:500]}...")
                 return response
@@ -75,7 +76,7 @@ class LLMGateway:
         messages: List[Dict[str, str]],
         format: str = "",
         options: Optional[Dict[str, Any]] = None,
-        keep_alive: str = "5m"
+        keep_alive: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Выполняет chat-запрос к Ollama через семафор.
@@ -96,7 +97,7 @@ class LLMGateway:
                     messages=messages,
                     format=format,
                     options=base_options,
-                    keep_alive=keep_alive
+                    keep_alive=keep_alive or self.default_keep_alive
                 )
                 logger.debug(f"LLM Chat [{model}] - Raw Response snippet: {response.get('message', {}).get('content', '')[:500]}...")
                 return response
