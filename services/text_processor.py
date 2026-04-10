@@ -58,7 +58,11 @@ async def _fetch_spelling_corrections(text_hash: str, text: str) -> str:
 class TextProcessor:
     @staticmethod
     def clean_llm_output(text: str) -> str:
-        """Очищает текст от технических артефактов нейросети."""
+        """Очищает текст от технических артефактов нейросети и форматирует логику."""
+        # HTML-очистка: Markdown в HTML
+        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+        text = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'<i>\1</i>', text)
+
         # Удаляем строку IMAGE_QUERY
         text = re.sub(r"^IMAGE_QUERY:.*$", "", text, flags=re.MULTILINE | re.IGNORECASE)
         # Удаляем строки с номером новости

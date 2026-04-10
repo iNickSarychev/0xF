@@ -130,10 +130,6 @@ class EditorAgent:
             image_query = data.get("image_query")
             article_text = data.get("post_text", "").strip()
 
-            # HTML-очистка
-            article_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', article_text)
-            article_text = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'<i>\1</i>', article_text)
-
             # 5. Reflection Loop: отправляем черновик Критику
             article_text, critique = await critic_agent.run_reflection_loop(
                 initial_draft=article_text,
