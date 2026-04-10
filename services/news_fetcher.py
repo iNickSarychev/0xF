@@ -177,7 +177,7 @@ class NewsFetcher:
             return None
 
         pub_epoch = calendar.timegm(pub_parsed)
-        if (current_time - pub_epoch) > 172800:
+        if (current_time - pub_epoch) > 86400:
             stats["too_old"] += 1
             return None
 

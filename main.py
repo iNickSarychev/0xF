@@ -335,7 +335,7 @@ async def generate_and_moderate() -> None:
             logger.warning("Ollama is offline. Skipping.")
             return
 
-        news_list = await news_fetcher.get_news_batch(max_count=15)
+        news_list = await news_fetcher.get_news_batch(max_count=30)
         if not news_list:
             logger.info("No fresh news. Skipping.")
             return
