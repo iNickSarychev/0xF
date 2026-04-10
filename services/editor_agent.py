@@ -8,7 +8,7 @@ import random
 from config import config
 from database import db
 from services.vector_service import vector_service
-from services.prompts import EDITOR_PROMPT, GOLDEN_SAMPLES, get_random_structure
+from services.prompts import EDITOR_PROMPT, get_random_structure
 from services.text_processor import text_processor
 from services.critic_agent import critic_agent
 from services.selector_agent import selector_agent
