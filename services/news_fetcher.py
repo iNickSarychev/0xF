@@ -122,27 +122,36 @@ class NewsFetcher:
             feed_entries_count = len(feed.entries)
             stats["total"] += feed_entries_count
 
+            valid_entries = []
             for entry in feed.entries:
-                news_item = self._parse_entry(entry, current_time, source_bonus, stats)
+                news_item = self._parse_entry(entry, current_time, source_bonus, stats, feed_url)
                 if news_item:
-                    all_news.append(news_item)
+                    valid_entries.append(news_item)
+            
+            # Чтобы ленты вроде arXiv (с десятками постов в день) не забивали выдачу,
+            # берем только топ-3 самых свежих публикации с каждой ленты.
+            valid_entries.sort(
+                key=lambda item: item["published"] if item["published"] else time.gmtime(0),
+                reverse=True
+            )
+            all_news.extend(valid_entries[:3])
 
         logger.info(
             f"Fetch completed. Total parsed: {stats['total']}, "
             f"Too old: {stats['too_old']}, "
             f"Already sent: {stats['already_sent']}, "
             f"Errors: {stats['errors']}, "
-            f"Fresh news found: {len(all_news)}"
+            f"Fresh news found (after per-feed cap): {len(all_news)}"
         )
 
-        # Сортируем по дате: от новых к старым
+        # Сортируем по дате: от новых к старым (глобальная сортировка перед трендами)
         epoch_zero = time.gmtime(0)
         all_news.sort(
             key=lambda item: item["published"] if item["published"] else epoch_zero,
             reverse=True,
         )
 
-        # Детекция горячих новостей
+        # Детекция горячих новостей с учетом разных источников
         all_news = self._detect_trending(all_news)
 
         return all_news[:max_count]
@@ -160,6 +169,7 @@ class NewsFetcher:
         current_time: float,
         source_bonus: int,
         stats: dict,
+        feed_url: str,
     ) -> dict | None:
         """Парсит одну запись RSS. Возвращает None, если запись невалидна."""
         pub_parsed = entry.get("published_parsed")
@@ -182,6 +192,7 @@ class NewsFetcher:
             "image": _extract_image_from_entry(entry),
             "published": pub_parsed,
             "source_bonus": source_bonus,
+            "feed_url": feed_url,
         }
 
     @staticmethod
@@ -189,7 +200,7 @@ class NewsFetcher:
         """Помечает новости, которые упоминаются в нескольких источниках."""
         for i, news_item in enumerate(news_list):
             keywords = _extract_keywords(news_item["title"])
-            similar_count = 0
+            similar_sources = {news_item["feed_url"]}
 
             for j, other in enumerate(news_list):
                 if i == j:
@@ -197,11 +208,15 @@ class NewsFetcher:
                 other_keywords = _extract_keywords(other["title"])
                 overlap = keywords & other_keywords
                 if len(overlap) >= 3:
-                    similar_count += 1
+                    similar_sources.add(other["feed_url"])
 
-            news_item["trending"] = similar_count >= 2
-            # Итоговый вес учитывает и количество совпадений, и приоритет источника
-            news_item["trending_score"] = similar_count + news_item.get("source_bonus", 0)
+            # Тренд - только если пересекаются ключевики из РАЗНЫХ лент
+            is_trending = len(similar_sources) >= 2
+            news_item["trending"] = is_trending
+            
+            # Итоговый вес = (кол-во разных источников - 1) + бонус приоритета
+            bonus_from_trend = len(similar_sources) - 1 if is_trending else 0
+            news_item["trending_score"] = bonus_from_trend + news_item.get("source_bonus", 0)
 
         # Trending и приоритетные наверх, внутри — по дате
         news_list.sort(key=lambda item: item.get("trending_score", 0), reverse=True)
