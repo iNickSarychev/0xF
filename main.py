@@ -44,6 +44,11 @@ logging.getLogger("aiohttp").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("httpcore.connection").setLevel(logging.WARNING)
+logging.getLogger("h2").setLevel(logging.WARNING)
+logging.getLogger("cookie_store").setLevel(logging.WARNING)
+logging.getLogger("PIL").setLevel(logging.WARNING)
+logging.getLogger("pytz").setLevel(logging.WARNING)
+logging.getLogger("primp").setLevel(logging.WARNING)
 
 # ─── Инициализация ────────────────────────────────────────────────────────────
 bot = Bot(

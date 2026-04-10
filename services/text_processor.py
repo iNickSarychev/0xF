@@ -59,6 +59,11 @@ class TextProcessor:
     @staticmethod
     def clean_llm_output(text: str) -> str:
         """Очищает текст от технических артефактов нейросети и форматирует логику."""
+        # Принудительная замена <br> и подобных на переносы
+        text = re.sub(r'<(?:br|p|div)[^>]*>', '\n', text, flags=re.IGNORECASE)
+        # Удаляем все остальные теги, кроме разрешенных Telegram (b, i, a, code, pre)
+        text = re.sub(r'<(?!b\b|/b\b|i\b|/i\b|a\b|/a\b|code\b|/code\b|pre\b|/pre\b)[^>]+>', '', text, flags=re.IGNORECASE)
+
         # HTML-очистка: Markdown в HTML
         text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
         text = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'<i>\1</i>', text)

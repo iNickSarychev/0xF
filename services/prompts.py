@@ -106,6 +106,8 @@ FORMATTING:
 - <b>Bold</b> only for headline, names, and numbers
 - Use "–" for lists if needed
 - No emojis and no hashtags
+- **CRITICAL**: Do NOT use <br> or <p> tags. Use only \n for line breaks.
+- Use only <b> and <i> tags. Any other HTML tags are forbidden.
 
 RULES:
 1. The post text MUST be in **RUSSIAN**, even if the news is in English!
