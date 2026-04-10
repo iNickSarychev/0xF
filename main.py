@@ -404,7 +404,8 @@ async def generate_and_moderate() -> None:
             if "vector" in news_item:
                 db.save_sent_vector(news_item["title"], news_item["vector"])
 
-            final_text = _truncate_article(article_text) + "\n\n<b>@AxFUTURE</b>"
+            source_part = f"\n\n<a href='{source_link}'>🔗 Источник</a>" if source_link else ""
+            final_text = _truncate_article(article_text) + source_part + "\n\n<b>@AxFUTURE</b>"
             keyboard = _build_moderation_keyboard(source_link)
             publish_time = datetime.now(msk_tz) + timedelta(minutes=10)
 
@@ -754,7 +755,8 @@ async def cmd_news(message: types.Message) -> None:
             news_item["image"] = valid_image
 
             source_link = news_item.get("link")
-            final_text = _truncate_article(article_text) + "\n\n<b>@AxFUTURE</b>"
+            source_part = f"\n\n<a href='{source_link}'>🔗 Источник</a>" if source_link else ""
+            final_text = _truncate_article(article_text) + source_part + "\n\n<b>@AxFUTURE</b>"
             keyboard = _build_moderation_keyboard(source_url=source_link)
 
             try:
