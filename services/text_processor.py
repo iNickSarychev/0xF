@@ -94,9 +94,12 @@ class TextProcessor:
         # Удаляем одинокий номер новости в начале
         text = re.sub(r"^\d{1,2}\s*\n", "", text)
         # Удаляем заголовки-секции из промпта, которые модель иногда печатает буквально
+        # Паттерн для bullet-маркеров перед заголовком: "- Победители:", "– Проигравшие:", "- - Победители:"
+        _bullet_prefix = r"^[\s\-–—•]*"
         # Русские варианты
         text = re.sub(
-            r"^(?:TL;?DR|Суть(?:\s+для\s+нас)?|So\s+What\??|Финал|"
+            _bullet_prefix
+            + r"(?:TL;?DR|Суть(?:\s+для\s+нас)?|So\s+What\??|Финал|"
             r"Практический\s+юзкейс|Детали|Заголовок|Контекст|Вердикт|"
             r"Киллер[\-\s]?фичи|Ложка\s+дегтя|Ограничения|"
             r"Победители|Проигравшие|Итог)[:\-]?\s*",
@@ -104,9 +107,10 @@ class TextProcessor:
             text,
             flags=re.MULTILINE | re.IGNORECASE,
         )
-        # Английские варианты (промпты теперь на EN)
+        # Английские варианты
         text = re.sub(
-            r"^(?:Winners|Losers|Verdict|Context|Catch|Bottom\s+line|"
+            _bullet_prefix
+            + r"(?:Winners|Losers|Verdict|Context|Catch|Bottom\s+line|"
             r"Killer\s+features|Why\s+it\s+matters|Practical\s+use\s+case|"
             r"Closing(?:\s+line)?|Limitations|Details|Headline)[:\-]?\s*",
             "",

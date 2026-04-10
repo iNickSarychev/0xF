@@ -117,7 +117,7 @@ class EditorAgent:
             # 5. Reflection Loop: отправляем черновик Критику
             article_text, critique = await critic_agent.run_reflection_loop(
                 initial_draft=article_text,
-                max_iterations=2,
+                max_iterations=3,
             )
             logger.info(
                 f"Final critic score: {critique.score}/10 | "

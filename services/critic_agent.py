@@ -12,7 +12,7 @@ from services.prompts import CRITIC_PROMPT, REWRITE_PROMPT
 logger = logging.getLogger(__name__)
 
 # Порог оценки, при котором текст считается одобренным
-APPROVAL_SCORE_THRESHOLD: int = 8
+APPROVAL_SCORE_THRESHOLD: int = 9
 
 
 @dataclass
@@ -108,7 +108,7 @@ class CriticAgent:
     async def run_reflection_loop(
         self,
         initial_draft: str,
-        max_iterations: int = 2,
+        max_iterations: int = 3,
     ) -> tuple[str, CritiqueResult]:
         """
         Запускает цикл «Черновик → Критик → Переработка».

@@ -115,15 +115,15 @@ WHAT TO CHECK:
    — First paragraph that is not a clear news summary and doesn't answer "what happened?"
    — Sentences that can be removed without losing meaning
 
-4. STRUCTURE:
+4. STRUCTURE & SUBSTANCE (Critical):
    — Is there a bold headline on the first line <b>...</b>? (Mandatory!)
-   — Does the first paragraph answer the main question of the news? (Mandatory!)
-   — Concrete facts: numbers, names, dates?
+   — Does the first paragraph answer "what exactly happened?" (If it's too vague like "Let's talk about AI", reduce score by 4).
+   — CONCRETE FACTS: Does the text contain at least 2-3 specific entities? (Numbers, company names, specific model names, dates). If the text is purely theoretical/vague — REJECT IT (is_approved = false).
 
 RESPONSE RULES:
 - score from 1 to 10 (10 = perfect post)
-- is_approved = true only if score >= 8
-- feedback — strictly specific corrections, no praise
+- is_approved = true ONLY if score >= 8 AND there are concrete facts.
+- feedback — strictly specific corrections, no praise. If the text is "watery", demand specific facts from the source.
 - If the text is good — write "Text approved" in feedback
 
 RESPOND STRICTLY IN JSON FORMAT:
