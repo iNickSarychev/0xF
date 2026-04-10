@@ -1,5 +1,6 @@
 import aiohttp
 import hashlib
+import json
 import logging
 import re
 
@@ -61,6 +62,30 @@ class TextProcessor:
         "Архитектура:", "Технические детали:", "Суть:", "Практический совет:", "Как это работает:",
         "Контекст:", "Детали:", "Итог:", "ТТХ:", "Характеристики:"
     ]
+
+    @staticmethod
+    def safe_json_loads(text: str) -> dict:
+        """Попытка починить и распарсить JSON от LLM, очищая его от артефактов."""
+        if not text:
+            return {}
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            # Очистка от возможных Markdown-блоков (```json ... ```)
+            clean_text = re.sub(r'^```[a-zA-Z]*\s*|\s*```$', '', text.strip(), flags=re.MULTILINE)
+            try:
+                return json.loads(clean_text)
+            except json.JSONDecodeError:
+                # Агрессивная очистка: убираем лишние переносы внутри строк
+                fixed_text = text.replace('\n', ' ').replace('\r', '')
+                # Ищем всё, что похоже на JSON объект внутри строки
+                match = re.search(r'\{.*\}', fixed_text)
+                if match:
+                    try:
+                        return json.loads(match.group(0))
+                    except:
+                        pass
+                return {}
 
     @staticmethod
     def hallucination_filter(text: str) -> str:

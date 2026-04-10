@@ -1,10 +1,5 @@
-import ollama
-import httpx
-import json
 import logging
-import re
 from typing import List, Dict, Tuple, Any, Optional
-import random
 from config import config
 from database import db
 from services.vector_service import vector_service
@@ -19,26 +14,6 @@ logger = logging.getLogger(__name__)
 class EditorAgent:
     def __init__(self, model: str = config.OLLAMA_MODEL):
         self.model = model
-
-    def _safe_json_loads(self, text: str) -> dict:
-        """Попытка починить и распарсить JSON от LLM."""
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            # Очистка от возможных Markdown-блоков
-            clean_text = re.sub(r'^```json\s*|\s*```$', '', text.strip(), flags=re.MULTILINE)
-            try:
-                return json.loads(clean_text)
-            except json.JSONDecodeError as e:
-                # Если всё совсем плохо, пробуем совсем грубую очистку
-                # (иногда LLM не экранирует кавычки внутри строк)
-                logger.warning(f"JSON standard parse failed, trying aggressive fix: {e}")
-                # Это очень упрощенный фикс, но часто помогает
-                fixed_text = text.replace('\n', ' ').replace('\r', '')
-                try:
-                    return json.loads(fixed_text)
-                except:
-                    raise e
 
     async def process_news_batch(
         self, news_list: List[Dict[str, str]], temperature: float | None = 0.5
@@ -120,26 +95,17 @@ class EditorAgent:
                 news_input=news_input
             )
             
-            llm_options: dict = {
-                "num_predict": 4096,
-                "top_p": 0.9,
-                "repeat_penalty": 1.1
-            }
-            if temperature is not None:
-                llm_options["temperature"] = temperature
-            
             response = await llm_gateway.generate(
                 model=self.model,
                 prompt=prompt,
-                format="json",
-                options=llm_options
+                format="json"
             )
             
             raw_content = response['response'].strip()
             logger.debug(f"Editor Raw Result (first 500 chars): {raw_content[:500]}...")
             logger.debug(f"Editor LLM JSON: {raw_content}")
             
-            data = self._safe_json_loads(raw_content)
+            data = text_processor.safe_json_loads(raw_content)
             
             image_query = data.get("image_query")
             article_text = data.get("post_text", "").strip()

@@ -12,7 +12,6 @@ class Config:
     DB_PATH = os.getenv("DB_PATH", "news.db")
     CHANNEL_ID = os.getenv("CHANNEL_ID", "@AxFUTURE")
     ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "341481395"))
-    LLM_OPTIONS = {"num_predict": 4096}
 
     # RSS-ленты: AI-модели (приоритет), технологии, AGI
     RSS_FEEDS = [

@@ -1,11 +1,5 @@
-import json
 import logging
-import re
 from dataclasses import dataclass
-
-import httpx
-import ollama
-
 from config import config
 from services.prompts import CRITIC_PROMPT, REWRITE_PROMPT
 from services.text_processor import text_processor
@@ -16,12 +10,9 @@ logger = logging.getLogger(__name__)
 # Порог оценки, при котором текст считается одобренным
 APPROVAL_SCORE_THRESHOLD: int = 8
 
-
-
 @dataclass
 class CritiqueResult:
     """Результат оценки черновика агентом-критиком."""
-
     score: int
     has_ai_cliches: bool
     is_approved: bool
@@ -31,163 +22,68 @@ class CritiqueResult:
     def is_good_enough(self) -> bool:
         return self.is_approved or self.score >= APPROVAL_SCORE_THRESHOLD
 
-
 class CriticAgent:
-    """
-    Агент-критик («Злой Главред»).
-    Оценивает черновик и при необходимости запускает цикл переработки.
-    Использует ту же модель Ollama, что и EditorAgent, но с другим промптом.
-    """
+    """Оценивает черновик и запускает цикл переработки."""
 
     def __init__(self, model: str = config.OLLAMA_MODEL) -> None:
         self.model = model
 
     async def critique(self, draft_text: str) -> CritiqueResult:
-        """
-        Отправляет черновик на оценку.
-        Возвращает CritiqueResult с оценкой и замечаниями.
-        """
-        logger.info(f"Critique target length: {len(draft_text)} chars")
+        """Отправляет черновик на оценку."""
         if not draft_text.strip():
             logger.warning("Critic received empty draft_text!")
 
         prompt = CRITIC_PROMPT.format(draft_text=draft_text)
         try:
-            response = await llm_gateway.generate(
-                model=self.model,
-                prompt=prompt,
-                format="json",
-                options={"num_predict": 512},
-            )
-            raw = response["response"].strip()
-            logger.debug(f"Critic raw response: {raw}")
-
-            data = json.loads(raw)
+            response = await llm_gateway.generate(model=self.model, prompt=prompt, format="json")
+            data = text_processor.safe_json_loads(response["response"])
+            
             return CritiqueResult(
                 score=int(data.get("score", 5)),
                 has_ai_cliches=bool(data.get("has_ai_cliches", False)),
                 is_approved=bool(data.get("is_approved", False)),
                 feedback=str(data.get("feedback", "")),
             )
-
         except Exception as exc:
-            logger.warning(f"CriticAgent error (skipping critique): {exc}")
-            # При сбое критика не блокируем публикацию — возвращаем одобрение
-            return CritiqueResult(
-                score=8,
-                has_ai_cliches=False,
-                is_approved=True,
-                feedback="Критик недоступен, текст пропущен автоматически.",
-            )
+            logger.warning(f"Critique error: {exc}")
+            return CritiqueResult(8, False, True, "Auto-approved due to error")
 
-
-
-
-    async def rewrite(
-        self, draft_text: str, feedback: str, news_input: str, temperature: float = 0.5
-    ) -> str:
-        """
-        Просит модель переписать черновик по замечаниям критика.
-        Возвращает исправленный текст (не JSON).
-        """
-        prompt = REWRITE_PROMPT.format(
-            draft_text=draft_text, 
-            feedback=feedback,
-            news_input=news_input
-        )
+    async def rewrite(self, draft_text: str, feedback: str, news_input: str) -> str:
+        """Переписывает черновик по замечаниям."""
+        prompt = REWRITE_PROMPT.format(draft_text=draft_text, feedback=feedback, news_input=news_input)
         try:
             response = await llm_gateway.generate(
-                model=self.model,
-                prompt=prompt,
-                options={
-                    "num_predict": 1500,
-                    "temperature": temperature,
-                },
+                model=self.model, 
+                prompt=prompt
             )
-            rewritten = response["response"].strip()
-
-            # Очищаем от возможных остатков JSON/markdown-обёрток
-            rewritten = re.sub(r"^```[a-z]*\n?", "", rewritten)
-            rewritten = re.sub(r"\n?```$", "", rewritten)
-            
-            # Принудительная очистка от мусорных заголовков и исправление HTML
-            rewritten = text_processor.clean_llm_output(rewritten)
-
-            logger.debug(f"Rewritten draft length: {len(rewritten)} chars")
-            return rewritten
-
+            return text_processor.clean_llm_output(response["response"])
         except Exception as exc:
-            logger.warning(f"Rewrite error (keeping original draft): {exc}")
+            logger.warning(f"Rewrite error: {exc}")
             return draft_text
 
-    async def run_reflection_loop(
-        self,
-        initial_draft: str,
-        news_input: str,
-        max_iterations: int = 3,
-    ) -> tuple[str, CritiqueResult]:
-        """
-        Запускает цикл «Черновик → Критик → Переработка».
+    async def run_reflection_loop(self, initial_draft: str, news_input: str, max_iterations: int = 3) -> tuple[str, CritiqueResult]:
+        """Цикл «Черновик → Критик → Переработка»."""
+        current_draft, previous_score, stall_counter = initial_draft, -1, 0
+        last_critique = CritiqueResult(0, False, False, "")
 
-        Args:
-            initial_draft: первый черновик от EditorAgent.
-            news_input: исходный текст новости для контекста.
-            max_iterations: максимальное количество итераций переработки.
-
-        Returns:
-            Кортеж (финальный_текст, последняя_оценка_критика).
-        """
-        current_draft = initial_draft
-        last_critique = CritiqueResult(
-            score=0, has_ai_cliches=False, is_approved=False, feedback=""
-        )
-        previous_score = -1
-        stall_counter = 0
-
-        for iteration in range(1, max_iterations + 1):
-            logger.info(f"Reflection loop iteration {iteration}/{max_iterations}")
-
+        for i in range(1, max_iterations + 1):
+            logger.info(f"Reflection loop iteration {i}/{max_iterations}")
             last_critique = await self.critique(current_draft)
-            logger.info(
-                f"Critic score: {last_critique.score}/10 | "
-                f"Approved: {last_critique.is_approved} | "
-                f"Cliches: {last_critique.has_ai_cliches} | "
-                f"Feedback: {last_critique.feedback[:120]}"
-            )
-
+            
             if last_critique.is_good_enough:
-                logger.info(f"Text approved on iteration {iteration}.")
                 break
             
-            # Проверка на отсутствие прогресса (Stall Detection)
+            # Проверка на отсутствие прогресса
             if last_critique.score <= previous_score:
                 stall_counter += 1
-                if stall_counter >= 2:
-                    logger.warning("Score stalled for 2 iterations. Stopping rewrite loop.")
-                    break
+                if stall_counter >= 2: break
             else:
                 stall_counter = 0
             
             previous_score = last_critique.score
-
-            if iteration < max_iterations:
-                logger.info("Sending draft for rewrite...")
-                # Увеличиваем температуру с каждой итерацией для "креативности" исправлений
-                current_temp = 0.2 + (iteration * 0.15)
-                
-                current_draft = await self.rewrite(
-                    draft_text=current_draft,
-                    feedback=last_critique.feedback,
-                    news_input=news_input,
-                    temperature=current_temp
-                )
-            else:
-                logger.warning(
-                    f"Max iterations reached. Publishing best available draft "
-                    f"(score={last_critique.score})."
-                )
+            if i < max_iterations:
+                current_draft = await self.rewrite(current_draft, last_critique.feedback, news_input)
 
         return current_draft, last_critique
-
 
 critic_agent = CriticAgent()
