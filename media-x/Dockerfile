@@ -11,7 +11,7 @@ RUN go mod download
 COPY . .
 
 # Собираем оптимизированный бинарник
-RUN CGO_ENABLED=0 GOOS=linux go build -o media-x main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -p 1 -ldflags="-s -w" -o media-x main.go
 
 # Финальный образ
 FROM debian:bullseye-slim
