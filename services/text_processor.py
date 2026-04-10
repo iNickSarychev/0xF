@@ -56,7 +56,11 @@ async def _fetch_spelling_corrections(text_hash: str, text: str) -> str:
 
 
 class TextProcessor:
-    FORBIDDEN_PHRASES = []
+    FORBIDDEN_PHRASES = [
+        "TL;DR:", "Механика:", "Ключевые метрики:", "Почему это важно:", "Вердикт:",
+        "Архитектура:", "Технические детали:", "Суть:", "Практический совет:", "Как это работает:",
+        "Контекст:", "Детали:", "Итог:", "ТТХ:", "Характеристики:"
+    ]
 
     @staticmethod
     def hallucination_filter(text: str) -> str:
