@@ -121,6 +121,8 @@ RESPOND STRICTLY IN JSON FORMAT:
 
     CRITICAL: Escape all double quotes inside "post_text" with backslash (e.g. \"text\"). Do not include any text outside the JSON block. Do not use Markdown blocks (```json).
     
+    IMPORTANT: Write ONLY in literary Russian language, using standard technical terminology. Avoid hallucinated or distorted words.
+    
 No explanations outside of JSON.
 
 SELECTED NEWS TO WRITE ABOUT:
@@ -183,16 +185,20 @@ The chief editor returned your text with corrections. Rewrite it strictly follow
 YOUR DRAFT:
 {draft_text}
 
+ORIGINAL NEWS SOURCE:
+{news_input}
+
 EDITOR'S FEEDBACK:
 {feedback}
 
 RULES:
 - Fix only what the editor pointed out
-- Don't change facts or the core meaning of the news
+- Use the ORIGINAL NEWS SOURCE to verify facts, metrics and technical details. Do not hallucinate.
+- Don't change core meaning
 - Preserve HTML tags (<b>, <i>)
 - Text must be in Russian
 - No emojis and no hashtags
-- 300–1000 characters
+- 300–1200 characters (Ensure the text is informative and detailed)
 
 RESPOND WITH THE FINAL POST TEXT ONLY.
 ANY introductory words, apologies, or phrases like "Here is the corrected text", "Sure", "Done" are FORBIDDEN. Start directly with the <b>bold headline</b>.
@@ -204,10 +210,10 @@ Here is a summary of the news article:
 {post_text}
 
 CRITICAL RULES:
-1. Does this image directly depict the event, people, or concepts mentioned in the text?
-2. REJECT any images with logos or buildings of companies NOT mentioned in the text.
-3. REJECT abstract logos, memes, or completely unrelated graphics.
-4. REJECT any image that contains large English text or watermarks that contradict the summary.
+1. Does this image relate to the topic mentioned in the text?
+2. REJECT ONLY if the image is completely unrelated (e.g., a landscape when the text is about a CPU) or is a random meme.
+3. If the image depicts an abstract concept of AI, robots, or tech mentioned in the text, ACCEPT it (YES).
+4. If in doubt, output YES.
 
 Output EXACTLY ONE WORD: YES or NO. Do not add punctuation or explanations.
 """

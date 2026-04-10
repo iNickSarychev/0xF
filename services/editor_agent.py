@@ -109,7 +109,11 @@ class EditorAgent:
                 news_input=news_input,
             )
             
-            llm_options: dict = {"num_predict": 4096}
+            llm_options: dict = {
+                "num_predict": 4096,
+                "top_p": 0.9,
+                "repeat_penalty": 1.1
+            }
             if temperature is not None:
                 llm_options["temperature"] = temperature
             
@@ -132,6 +136,7 @@ class EditorAgent:
             # 5. Reflection Loop: отправляем черновик Критику
             article_text, critique = await critic_agent.run_reflection_loop(
                 initial_draft=article_text,
+                news_input=news_input,
                 max_iterations=3,
             )
             logger.info(

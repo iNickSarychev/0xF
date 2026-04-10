@@ -22,7 +22,7 @@ class Config:
         "https://techcrunch.com/category/artificial-intelligence/feed/",
         "https://www.wired.com/feed/tag/ai/latest/rss",
         "https://www.marktechpost.com/feed/",
-        "https://www.theverge.com/ai-artificial-intelligence/rss/index.xml",
+        "https://www.theverge.com/rss/index.xml",
         "https://feeds.arstechnica.com/arstechnica/technology-lab",
         "https://www.technologyreview.com/feed/",
         "https://habr.com/ru/rss/articles/?fl=ru",

@@ -78,12 +78,16 @@ class CriticAgent:
                 feedback="Критик недоступен, текст пропущен автоматически.",
             )
 
-    async def rewrite(self, draft_text: str, feedback: str) -> str:
+    async def rewrite(self, draft_text: str, feedback: str, news_input: str) -> str:
         """
         Просит модель переписать черновик по замечаниям критика.
         Возвращает исправленный текст (не JSON).
         """
-        prompt = REWRITE_PROMPT.format(draft_text=draft_text, feedback=feedback)
+        prompt = REWRITE_PROMPT.format(
+            draft_text=draft_text, 
+            feedback=feedback,
+            news_input=news_input
+        )
         try:
             response = await self.client.generate(
                 model=self.model,
@@ -108,6 +112,7 @@ class CriticAgent:
     async def run_reflection_loop(
         self,
         initial_draft: str,
+        news_input: str,
         max_iterations: int = 3,
     ) -> tuple[str, CritiqueResult]:
         """
@@ -115,6 +120,7 @@ class CriticAgent:
 
         Args:
             initial_draft: первый черновик от EditorAgent.
+            news_input: исходный текст новости для контекста.
             max_iterations: максимальное количество итераций переработки.
 
         Returns:
@@ -145,6 +151,7 @@ class CriticAgent:
                 current_draft = await self.rewrite(
                     draft_text=current_draft,
                     feedback=last_critique.feedback,
+                    news_input=news_input
                 )
             else:
                 logger.warning(

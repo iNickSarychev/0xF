@@ -49,6 +49,9 @@ logging.getLogger("cookie_store").setLevel(logging.WARNING)
 logging.getLogger("PIL").setLevel(logging.WARNING)
 logging.getLogger("pytz").setLevel(logging.WARNING)
 logging.getLogger("primp").setLevel(logging.WARNING)
+logging.getLogger("rustls").setLevel(logging.WARNING)
+logging.getLogger("hyper").setLevel(logging.WARNING)
+logging.getLogger("reqwest").setLevel(logging.WARNING)
 
 # ─── Инициализация ────────────────────────────────────────────────────────────
 bot = Bot(
@@ -246,6 +249,12 @@ async def _find_valid_image(news_item: dict, image_query: str | None) -> str | N
             return ddg_img
         if ddg_img:
             logger.info(f"Vision rejected DDG image: {ddg_img}")
+
+    # Fallback: Если всё отклонено, но картинки были — берем первую попавшуюся
+    fallback_img = rss_image or extracted_img or ddg_img
+    if fallback_img:
+        logger.info(f"Fallback: Using first available image despite Vision rejection: {fallback_img}")
+        return fallback_img
 
     return None
 
@@ -654,28 +663,40 @@ async def cmd_news(message: types.Message) -> None:
 
     try:
         if not await editor_agent.is_available():
-            await status_msg.edit_text(
-                "🖥️ Ollama недоступна (ПК выключен или Ollama не запущена).\n"
-                "Генерация невозможна."
-            )
+            try:
+                await status_msg.edit_text(
+                    "🖥️ Ollama недоступна (ПК выключен или Ollama не запущена).\n"
+                    "Генерация невозможна."
+                )
+            except Exception:
+                pass
             return
 
         news_list = await news_fetcher.get_news_batch(max_count=15)
         if not news_list:
-            await status_msg.edit_text(
-                "🤷 За последние 24 часа не нашлось значимых новостей."
-            )
+            try:
+                await status_msg.edit_text(
+                    "🤷 За последние 24 часа не нашлось значимых новостей."
+                )
+            except Exception:
+                pass
             return
 
-        await status_msg.edit_text(
-            f"🖊️ Найдено: {len(news_list)}. Генерирую статью..."
-        )
+        try:
+            await status_msg.edit_text(
+                f"🖊️ Найдено: {len(news_list)}. Генерирую статью..."
+            )
+        except Exception:
+            pass
 
         article_text, news_item, image_query = await _run_generation_pipeline(news_list)
         if not news_item:
-            await status_msg.edit_text(
-                "🤷 Не нашлось значимых новостей, прошедших проверку качества."
-            )
+            try:
+                await status_msg.edit_text(
+                    "🤷 Не нашлось значимых новостей, прошедших проверку качества."
+                )
+            except Exception:
+                pass
             return
 
         source_link = news_item.get("link", "")
@@ -683,7 +704,12 @@ async def cmd_news(message: types.Message) -> None:
         if "vector" in news_item:
             db.save_sent_vector(news_item["title"], news_item["vector"])
 
-        await status_msg.edit_text("🖼️ Ищу подходящее фото...")
+        try:
+            await status_msg.edit_text("🖼️ Ищу подходящее фото...")
+        except Exception as e:
+            if "message is not modified" not in str(e):
+                logger.error(f"Error updating status: {e}")
+                
         valid_image = await _find_valid_image(news_item, image_query)
         news_item["image"] = valid_image
 
@@ -703,9 +729,13 @@ async def cmd_news(message: types.Message) -> None:
                 )
                 status_msg_id = sent_msg.message_id
             else:
-                await status_msg.edit_text(
-                    final_text, reply_markup=keyboard, request_timeout=60
-                )
+                try:
+                    await status_msg.edit_text(
+                        final_text, reply_markup=keyboard, request_timeout=60
+                    )
+                except Exception as e:
+                    if "message is not modified" not in str(e):
+                        raise e
                 status_msg_id = status_msg.message_id
         except Exception as exc:
             logger.error(f"Error sending manual news: {exc}")
