@@ -24,7 +24,8 @@ class VectorService:
     async def _get_single_embedding(self, news: Dict[str, str]) -> Dict[str, str]:
         """Получает эмбеддинг для одной новости."""
         async with self.semaphore:
-            text_for_emb = f"{news['title']}. {news['summary']}"
+            summary_trunc = (news['summary'][:500] + '...') if len(news['summary']) > 500 else news['summary']
+            text_for_emb = f"{news['title']}. {summary_trunc}"
             try:
                 resp = await self.client.embeddings(
                     model='nomic-embed-text', 

@@ -41,6 +41,9 @@ logger = logging.getLogger(__name__)
 # Снижаем шум от библиотек
 logging.getLogger("aiogram").setLevel(logging.WARNING)
 logging.getLogger("aiohttp").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("httpcore.connection").setLevel(logging.WARNING)
 
 # ─── Инициализация ────────────────────────────────────────────────────────────
 bot = Bot(
