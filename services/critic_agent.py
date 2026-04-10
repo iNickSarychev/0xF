@@ -8,17 +8,13 @@ import ollama
 
 from config import config
 from services.prompts import CRITIC_PROMPT, REWRITE_PROMPT
+from services.text_processor import text_processor
 
 logger = logging.getLogger(__name__)
 
 # Порог оценки, при котором текст считается одобренным
 APPROVAL_SCORE_THRESHOLD: int = 9
 
-FORBIDDEN_PHRASES = [
-    "TL;DR:", "Summary:", "In conclusion:", 
-    "Суть:", "Вердикт:", "Вывод:", "Итог:",
-    "Заключение:", "Подводя итог:", "В результате:"
-]
 
 
 @dataclass
@@ -84,17 +80,8 @@ class CriticAgent:
                 feedback="Критик недоступен, текст пропущен автоматически.",
             )
 
-    def _sanitize_text(self, text: str) -> str:
-        """Принудительно удаляет запрещенные фразы-заголовки из текста."""
-        for phrase in FORBIDDEN_PHRASES:
-            # Удаляем фразу в начале строки или после переноса и пробелов
-            # Используем регулярку для более точного удаления (включая двоеточие)
-            pattern = re.compile(rf"(?m)^\s*{re.escape(phrase)}\s*", re.IGNORECASE)
-            text = pattern.sub("", text)
-            # Также удаляем если фраза просто затесалась в тексте (на всякий случай)
-            text = text.replace(phrase, "")
-        
-        return text.strip()
+        return text.strip() # This is a cleanup of an old replacement artifact, I'll remove the whole method below
+
 
     async def rewrite(
         self, draft_text: str, feedback: str, news_input: str, temperature: float = 0.5
@@ -126,8 +113,8 @@ class CriticAgent:
             rewritten = re.sub(r"^```[a-z]*\n?", "", rewritten)
             rewritten = re.sub(r"\n?```$", "", rewritten)
             
-            # Принудительная очистка от мусорных заголовков
-            rewritten = self._sanitize_text(rewritten)
+            # Принудительная очистка от мусорных заголовков и исправление HTML
+            rewritten = text_processor.clean_llm_output(rewritten)
 
             logger.debug(f"Rewritten draft length: {len(rewritten)} chars")
             return rewritten

@@ -128,6 +128,10 @@ async def _register_llm_failure(reason: str) -> None:
 # ─── Публикация на канал ──────────────────────────────────────────────────────
 async def publish_to_channel(article_text: str, image_url: str = None) -> None:
     """Публикует статью на канале с фото или текстом."""
+    # Последний рубеж защиты: балансировка HTML и фильтр мусора
+    article_text = text_processor.balance_html_tags(article_text)
+    article_text = text_processor.hallucination_filter(article_text)
+
     try:
         if image_url:
             await bot.send_photo(

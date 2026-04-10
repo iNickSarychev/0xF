@@ -56,11 +56,52 @@ async def _fetch_spelling_corrections(text_hash: str, text: str) -> str:
 
 
 class TextProcessor:
+    FORBIDDEN_PHRASES = [
+        "TL;DR:", "Summary:", "In conclusion:", 
+        "Суть:", "Вердикт:", "Вывод:", "Итог:",
+        "Заключение:", "Подводя итог:", "В результате:",
+        "Практический юзкейс:", "Интересный факт:", "Киллер-фичи:",
+        "Детали:", "Заголовок:", "Контекст:"
+    ]
+
+    @staticmethod
+    def hallucination_filter(text: str) -> str:
+        """
+        Удаляет блоки текста, которые не являются кириллицей, латиницей или цифрами.
+        Эффективно вырезает 'китайские галлюцинации'.
+        """
+        # Очистка на уровне символов: оставляем только "нормальные" для ведения канала символы
+        bad_chars_pattern = re.compile(r"[^\x00-\x7F\u0400-\u04FF\s\.,!?;:\"\'\-\(\)\+\«\»\—\>\<\=]")
+        return bad_chars_pattern.sub("", text)
+
+    @staticmethod
+    def balance_html_tags(text: str) -> str:
+        """
+        Находит незакрытые теги <b> и <i> и принудительно закрывает их.
+        Telegram падает, если есть открытый тег без парного закрывающего.
+        """
+        text = text.strip()
+        for tag in ['b', 'i']:
+            open_tags = len(re.findall(rf'<{tag}>', text, re.IGNORECASE))
+            close_tags = len(re.findall(rf'</{tag}>', text, re.IGNORECASE))
+            
+            if open_tags > close_tags:
+                text += f'</{tag}>' * (open_tags - close_tags)
+            elif close_tags > open_tags:
+                # Если закрывающих больше, удаляем лишние с конца (грубый фикс)
+                for _ in range(close_tags - open_tags):
+                    text = re.sub(rf'</{tag}>$', '', text, flags=re.IGNORECASE)
+        return text
+
     @staticmethod
     def clean_llm_output(text: str) -> str:
         """Очищает текст от технических артефактов нейросети и форматирует логику."""
-        # Принудительная замена <br> и подобных на переносы
+        # 0. Предварительная фильтрация галлюцинаций
+        text = TextProcessor.hallucination_filter(text)
+
+        # 1. Принудительная замена <br> и подобных на переносы
         text = re.sub(r'<(?:br|p|div)[^>]*>', '\n', text, flags=re.IGNORECASE)
+
         # Удаляем все остальные теги, кроме разрешенных Telegram (b, i, a, code, pre)
         text = re.sub(r'<(?!b\b|/b\b|i\b|/i\b|a\b|/a\b|code\b|/code\b|pre\b|/pre\b)[^>]+>', '', text, flags=re.IGNORECASE)
 
@@ -100,32 +141,17 @@ class TextProcessor:
         # Очистка пустых строк
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = text.strip()
-        # Удаляем одинокий номер новости в начале
-        text = re.sub(r"^\d{1,2}\s*\n", "", text)
-        # Удаляем заголовки-секции из промпта, которые модель иногда печатает буквально
-        # Паттерн для bullet-маркеров перед заголовком: "- Победители:", "– Проигравшие:", "- - Победители:"
-        _bullet_prefix = r"^[\s\-–—•]*"
-        # Русские варианты
-        text = re.sub(
-            _bullet_prefix
-            + r"(?:TL;?DR|Суть(?:\s+для\s+нас)?|So\s+What\??|Финал|"
-            r"Практический\s+(?:юзкейс|контекст|вывод)|Детали|Заголовок|Контекст|Вердикт|"
-            r"Киллер[\-\s]?фичи|Ложка\s+дегтя|Ограничения|"
-            r"Победители|Проигравшие|Итог)[:\-]?\s*",
-            "",
-            text,
-            flags=re.MULTILINE | re.IGNORECASE,
-        )
-        # Английские варианты
-        text = re.sub(
-            _bullet_prefix
-            + r"(?:Winners|Losers|Verdict|Context|Catch|Bottom\s+line|"
-            r"Killer\s+features|Why\s+it\s+matters|Practical\s+use\s+case|"
-            r"Closing(?:\s+line)?|Limitations|Details|Headline)[:\-]?\s*",
-            "",
-            text,
-            flags=re.MULTILINE | re.IGNORECASE,
-        )
+
+        # 2. Очистка запрещенных фраз
+        for phrase in TextProcessor.FORBIDDEN_PHRASES:
+            pattern = re.compile(rf"(?m)^[\s\-–—•]*{re.escape(phrase)}\s*", re.IGNORECASE)
+            text = pattern.sub("", text)
+            # Также удаляем если фраза просто затесалась в тексте
+            text = text.replace(phrase, "")
+
+        # 3. Балансировка HTML
+        text = TextProcessor.balance_html_tags(text)
+        
         return text.strip()
 
     @staticmethod
