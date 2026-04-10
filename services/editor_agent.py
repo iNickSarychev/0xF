@@ -12,16 +12,13 @@ from services.prompts import EDITOR_PROMPT, GOLDEN_SAMPLES, get_random_structure
 from services.text_processor import text_processor
 from services.critic_agent import critic_agent
 from services.selector_agent import selector_agent
+from services.llm_gateway import llm_gateway
 
 logger = logging.getLogger(__name__)
 
 class EditorAgent:
     def __init__(self, model: str = config.OLLAMA_MODEL):
         self.model = model
-        self.client = ollama.AsyncClient(
-            host=config.OLLAMA_BASE_URL,
-            timeout=httpx.Timeout(300.0, connect=10.0)
-        )
 
     def _safe_json_loads(self, text: str) -> dict:
         """Попытка починить и распарсить JSON от LLM."""
@@ -135,13 +132,11 @@ class EditorAgent:
             if temperature is not None:
                 llm_options["temperature"] = temperature
             
-            response = await self.client.generate(
+            response = await llm_gateway.generate(
                 model=self.model,
                 prompt=prompt,
-                stream=False,
                 format="json",
-                options=llm_options,
-                keep_alive="5m"
+                options=llm_options
             )
             
             raw_content = response['response'].strip()
@@ -174,7 +169,7 @@ class EditorAgent:
 
     async def is_available(self) -> bool:
         try:
-            await self.client.list()
+            await llm_gateway.client.list()
             return True
         except Exception:
             return False

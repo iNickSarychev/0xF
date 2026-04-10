@@ -799,6 +799,8 @@ async def restore_pending_jobs() -> None:
                 run_date=publish_at,
                 args=[message_id],
                 id=f"publish_{message_id}",
+                replace_existing=True,
+                coalesce=True,
             )
             count += 1
     if count:
@@ -817,6 +819,8 @@ async def main() -> None:
         hour="9-23",
         minute=0,
         id="hourly_moderation",
+        replace_existing=True,
+        coalesce=True,
     )
     scheduler.start()
     logger.info("Scheduler: hourly 09:00–23:00 MSK → admin moderation.")

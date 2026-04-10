@@ -4,19 +4,15 @@ import base64
 import logging
 import io
 from PIL import Image
-from typing import Optional
 from config import config
 from services.prompts import VISION_PROMPT
+from services.llm_gateway import llm_gateway
 
 logger = logging.getLogger(__name__)
 
 class VisionAgent:
     def __init__(self, model: str = "llava:7b"):
         self.model = model
-        self.client = ollama.AsyncClient(
-            host=config.OLLAMA_BASE_URL,
-            timeout=httpx.Timeout(300.0, connect=10.0)
-        )
 
     async def check_image(self, post_text: str, image_url: str) -> bool:
         """Проверяет релевантность картинки через LLaVA."""
@@ -42,11 +38,10 @@ class VisionAgent:
 
             prompt = VISION_PROMPT.format(post_text=post_text)
             
-            response = await self.client.generate(
+            response = await llm_gateway.generate(
                 model=self.model,
                 prompt=prompt,
                 images=[image_b64],
-                stream=False,
                 options={"num_predict": 10, "temperature": 0.5},
                 keep_alive="5m"
             )
@@ -61,7 +56,7 @@ class VisionAgent:
 
     async def is_available(self) -> bool:
         try:
-            await self.client.list()
+            await llm_gateway.client.list()
             return True
         except Exception:
             return False

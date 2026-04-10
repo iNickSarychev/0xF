@@ -9,6 +9,7 @@ import ollama
 from config import config
 from services.prompts import CRITIC_PROMPT, REWRITE_PROMPT
 from services.text_processor import text_processor
+from services.llm_gateway import llm_gateway
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +41,6 @@ class CriticAgent:
 
     def __init__(self, model: str = config.OLLAMA_MODEL) -> None:
         self.model = model
-        self.client = ollama.AsyncClient(
-            host=config.OLLAMA_BASE_URL,
-            timeout=httpx.Timeout(180.0, connect=10.0),
-        )
 
     async def critique(self, draft_text: str) -> CritiqueResult:
         """
@@ -52,10 +49,9 @@ class CriticAgent:
         """
         prompt = CRITIC_PROMPT.format(draft_text=draft_text)
         try:
-            response = await self.client.generate(
+            response = await llm_gateway.generate(
                 model=self.model,
                 prompt=prompt,
-                stream=False,
                 format="json",
                 options={"num_predict": 512},
             )
@@ -96,15 +92,12 @@ class CriticAgent:
             news_input=news_input
         )
         try:
-            response = await self.client.generate(
+            response = await llm_gateway.generate(
                 model=self.model,
                 prompt=prompt,
-                stream=False,
                 options={
-                    "num_predict": 1024,
+                    "num_predict": 1500,
                     "temperature": temperature,
-                    "top_p": 0.9,
-                    "repeat_penalty": 1.1
                 },
             )
             rewritten = response["response"].strip()

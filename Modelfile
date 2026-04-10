@@ -8,4 +8,4 @@ PARAMETER repeat_penalty 1.15
 PARAMETER presence_penalty 0.5
 
 # чтобы не обрезало посты
-PARAMETER num_ctx 4096
+PARAMETER num_ctx 8192
