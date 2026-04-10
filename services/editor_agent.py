@@ -109,6 +109,7 @@ class EditorAgent:
             f"TITLE: {selected_news['title']}\n"
             f"SOURCE SUMMARY: {selected_news['summary'][:1200]}\n"
         )
+        logger.debug(f"EDITOR_INPUT_NEWS:\n{news_input}")
 
         # 5. Выбор Golden Samples (2 случайных примера)
         samples = random.sample(GOLDEN_SAMPLES, 2)
@@ -140,6 +141,7 @@ class EditorAgent:
             )
             
             raw_content = response['response'].strip()
+            logger.debug(f"Editor Raw Result (first 500 chars): {raw_content[:500]}...")
             logger.debug(f"Editor LLM JSON: {raw_content}")
             
             data = self._safe_json_loads(raw_content)

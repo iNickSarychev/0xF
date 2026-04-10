@@ -47,6 +47,10 @@ class CriticAgent:
         Отправляет черновик на оценку.
         Возвращает CritiqueResult с оценкой и замечаниями.
         """
+        logger.info(f"Critique target length: {len(draft_text)} chars")
+        if not draft_text.strip():
+            logger.warning("Critic received empty draft_text!")
+
         prompt = CRITIC_PROMPT.format(draft_text=draft_text)
         try:
             response = await llm_gateway.generate(

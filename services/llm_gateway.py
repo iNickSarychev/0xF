@@ -53,6 +53,7 @@ class LLMGateway:
 
         async with self._semaphore:
             try:
+                logger.debug(f"LLM [{model}] - Prompt: {prompt[:300]}...")
                 response = await self.client.generate(
                     model=model,
                     prompt=prompt,
@@ -62,6 +63,7 @@ class LLMGateway:
                     options=base_options,
                     keep_alive=keep_alive
                 )
+                logger.debug(f"LLM [{model}] - Raw Response snippet: {response.get('response', '')[:500]}...")
                 return response
             except Exception as e:
                 logger.error(f"LLMGateway Error: {e}")
@@ -88,6 +90,7 @@ class LLMGateway:
 
         async with self._semaphore:
             try:
+                logger.debug(f"LLM Chat [{model}] - Last message: {messages[-1]['content'] if messages else 'Empty'}...")
                 response = await self.client.chat(
                     model=model,
                     messages=messages,
@@ -95,6 +98,7 @@ class LLMGateway:
                     options=base_options,
                     keep_alive=keep_alive
                 )
+                logger.debug(f"LLM Chat [{model}] - Raw Response snippet: {response.get('message', {}).get('content', '')[:500]}...")
                 return response
             except Exception as e:
                 logger.error(f"LLMGateway Chat Error: {e}")
