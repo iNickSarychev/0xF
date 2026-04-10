@@ -1,6 +1,9 @@
 import sqlite3
 import hashlib
+import logging
 from config import config
+
+logger = logging.getLogger(__name__)
 
 
 class Database:
