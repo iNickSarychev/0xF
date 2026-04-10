@@ -35,8 +35,7 @@ class SelectorAgent:
 
     async def select_best_news(self, news_list: List[Dict[str, str]], theme: str) -> int:
         """
-        Отправляет пакет новостей LLM и просит выбрать самую важную.
-        Ограничивает количество новостей до 15 для экономии контекста.
+        По очереди оценивает каждую новость и выбирает лучшую.
         """
         if not news_list:
             return 0
@@ -44,42 +43,53 @@ class SelectorAgent:
         if len(news_list) == 1:
             return 0
 
-        # Ограничиваем выборку топ-15 самыми свежими/важными
-        processing_list = news_list[:15]
+        # Оцениваем Топ-10 новостей (чтобы не ждать слишком долго)
+        processing_list = news_list[:10]
+        
+        best_score = -1
+        best_index = 0
+        
+        from services.prompts import SCORING_PROMPT
 
-        news_batch = ""
-        for i, news in enumerate(processing_list, 1):
-            trending_mark = " [TRENDING]" if news.get('trending') else ""
-            # Сокращаем описание до 300 символов (достаточно для выбора)
-            summary = news.get('summary', '')[:300]
-            news_batch += f"[{i}]{trending_mark} {news['title']}\n{summary}\n\n"
+        logger.info(f"Starting one-by-one scoring for {len(processing_list)} news items...")
 
-        prompt = SELECTOR_PROMPT.format(theme=theme, news_batch=news_batch)
+        for i, news in enumerate(processing_list):
+            try:
+                trending_mark = " [TRENDING]" if news.get('trending') else ""
+                summary = news.get('summary', '')[:500]
+                news_content = f"TITLE: {news['title']}{trending_mark}\nSUMMARY: {summary}"
+                
+                prompt = SCORING_PROMPT.format(theme=theme, news_content=news_content)
+                
+                response = await llm_gateway.generate(
+                    model=self.model,
+                    prompt=prompt,
+                    format="json",
+                    options={"num_predict": 256, "temperature": 0.3} # Низкая температура для точности оценок
+                )
+                
+                raw_content = response['response'].strip()
+                data = self._safe_json_loads(raw_content)
+                
+                score = int(data.get("score", 0))
+                reason = data.get("reason", "No reason")
+                
+                logger.info(f"News [{i+1}/{len(processing_list)}] Score: {score}/10 | {news['title'][:50]}... | Reason: {reason}")
 
-        try:
-            response = await llm_gateway.generate(
-                model=self.model,
-                prompt=prompt,
-                format="json",
-                options={"num_predict": 512}
-            )
+                if score > best_score:
+                    best_score = score
+                    best_index = i
+                
+                # Ранний выход, если нашли идеальную новость
+                if score >= 10:
+                    logger.info(f"Found perfect 10/10 news. Stopping search.")
+                    break
+                    
+            except Exception as e:
+                logger.error(f"Error scoring news item {i}: {e}")
+                continue
 
-            raw_content = response['response'].strip()
-            logger.debug(f"Selector LLM JSON: {raw_content}")
-
-            data = self._safe_json_loads(raw_content)
-            idx_val = data.get("selected_index", 1)
-            reason = data.get("reason", "No reason provided")
-            
-            logger.info(f"SelectorAgent chose index {idx_val} | Reason: {reason}")
-            
-            idx = int(idx_val) - 1
-            if 0 <= idx < len(processing_list):
-                return idx
-            return 0
-
-        except Exception as e:
-            logger.error(f"Error in SelectorAgent: {e}")
-            return 0
+        logger.info(f"SelectorAgent finalized choice: Index {best_index} with Score {best_score}")
+        return best_index
 
 selector_agent = SelectorAgent()
