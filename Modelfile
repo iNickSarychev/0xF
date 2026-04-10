@@ -1,14 +1,12 @@
-FROM qwen2.5:14b
+FROM t-tech/T-lite-it-2.1:q4_K_M
 
-PARAMETER temperature 0.9
-PARAMETER top_p 0.9
-PARAMETER repeat_penalty 1.15
+PARAMETER temperature 0.7
+PARAMETER top_p 0.8
+PARAMETER top_k 20
+PARAMETER repeat_penalty 1.1
 
-# увеличивает "живость"
-PARAMETER presence_penalty 0.5
+# Специально для T-lite (лучше работает с русскими повторами)
+PARAMETER presence_penalty 1.0
 
-# Принудительно используем CPU (решает проблему Error 500 на видеокарте)
-PARAMETER num_gpu 0
-
-# Ограничиваем контекст для стабильности на 18ГБ доступной RAM
-PARAMETER num_ctx 6144
+# Модель 7B отлично тянет 8K контекст на GPU
+PARAMETER num_ctx 8192
