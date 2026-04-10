@@ -93,6 +93,11 @@ class NewsFetcher:
         затем парсятся feedparser-ом.
         """
         sources = [url for _, url in self.db.get_all_sources()]
+        if not sources:
+            logger.warning("No sources found in database!")
+            return []
+
+        logger.info(f"Fetching news from {len(sources)} sources...")
 
         # Скачиваем все ленты параллельно (неблокирующий I/O)
         async with aiohttp.ClientSession(
@@ -103,19 +108,32 @@ class NewsFetcher:
 
         current_time = time.time()
         all_news: list[dict] = []
+        stats = {"total": 0, "too_old": 0, "already_sent": 0, "errors": 0}
 
         for feed_url, result in zip(sources, results):
             if isinstance(result, Exception):
                 logger.warning(f"Failed to fetch {feed_url}: {result}")
+                stats["errors"] += 1
                 continue
 
             feed = feedparser.parse(result)
             source_bonus = _get_source_bonus(feed_url)
+            
+            feed_entries_count = len(feed.entries)
+            stats["total"] += feed_entries_count
 
             for entry in feed.entries:
-                news_item = self._parse_entry(entry, current_time, source_bonus)
+                news_item = self._parse_entry(entry, current_time, source_bonus, stats)
                 if news_item:
                     all_news.append(news_item)
+
+        logger.info(
+            f"Fetch completed. Total parsed: {stats['total']}, "
+            f"Too old: {stats['too_old']}, "
+            f"Already sent: {stats['already_sent']}, "
+            f"Errors: {stats['errors']}, "
+            f"Fresh news found: {len(all_news)}"
+        )
 
         # Сортируем по дате: от новых к старым
         epoch_zero = time.gmtime(0)
@@ -141,6 +159,7 @@ class NewsFetcher:
         entry: feedparser.FeedParserDict,
         current_time: float,
         source_bonus: int,
+        stats: dict,
     ) -> dict | None:
         """Парсит одну запись RSS. Возвращает None, если запись невалидна."""
         pub_parsed = entry.get("published_parsed")
@@ -149,9 +168,11 @@ class NewsFetcher:
 
         pub_epoch = calendar.timegm(pub_parsed)
         if (current_time - pub_epoch) > 86400:
+            stats["too_old"] += 1
             return None
 
         if self.db.is_news_sent(entry.title, entry.link):
+            stats["already_sent"] += 1
             return None
 
         return {
