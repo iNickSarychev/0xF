@@ -20,7 +20,9 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # 4. Настройка проекта
-cd ~/PRO || { echo "❌ Директория ~/PRO не найдена!"; exit 1; }
+# Переходим в корень репозитория относительно расположения скрипта
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$PROJECT_ROOT" || { echo "❌ Не удалось найти корень проекта!"; exit 1; }
 git pull
 
 # 5. Сборка и запуск Media-X (Go)
