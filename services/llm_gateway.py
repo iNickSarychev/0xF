@@ -44,7 +44,7 @@ class LLMGateway:
         """
         # Базовые опции стабильности
         base_options = {
-            "num_ctx": 4096,
+            "num_ctx": 6144,
             "temperature": 0.7,
             "num_thread": 2, 
             "low_vram": True,
@@ -80,7 +80,7 @@ class LLMGateway:
         Выполняет chat-запрос к Ollama через семафор.
         """
         base_options = {
-            "num_ctx": 4096,
+            "num_ctx": 6144,
             "num_thread": 2,
             "low_vram": True,
         }
