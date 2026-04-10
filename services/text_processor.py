@@ -158,7 +158,16 @@ class TextProcessor:
             return False
 
         clean_text = re.sub(r"<[^>]+>", "", text).strip()
-        return len(clean_text) >= 100
+        if len(clean_text) < 100:
+            return False
+            
+        # Строгая проверка: первая строка должна начинаться с жирного текста
+        first_line = text.strip().split("\n")[0].strip()
+        if not first_line.startswith("<b>"):
+            logger.warning(f"Quality check failed: No <b> at the start of first line: {first_line[:20]}")
+            return False
+            
+        return True
 
 
 text_processor = TextProcessor()

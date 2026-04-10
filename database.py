@@ -79,6 +79,17 @@ class Database:
             # Всегда синхронизируем ленты из конфига с БД (новые добавятся, старые проигнорируются)
             for feed in config.RSS_FEEDS:
                 conn.execute("INSERT OR IGNORE INTO sources (url) VALUES (?)", (feed,))
+            
+            # Удаляем 404 адреса, чтобы бот не стучался впустую
+            bad_feeds = [
+                "https://ai.meta.com/blog/rss/",
+                "https://ai.meta.com/blog/feed/",
+                "https://www.anthropic.com/feed.xml",
+                "https://dev.to/feed/tag/prompt-engineering"
+            ]
+            for bad_feed in bad_feeds:
+                conn.execute("DELETE FROM sources WHERE url = ?", (bad_feed,))
+            
             conn.commit()
                 
             cursor = conn.execute("SELECT COUNT(*) FROM settings WHERE key='theme'")

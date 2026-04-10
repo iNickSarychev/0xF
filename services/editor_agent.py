@@ -94,7 +94,7 @@ class EditorAgent:
         news_input = ""
         for i, news in enumerate(news_list, 1):
             trending_mark = " [TRENDING — тема в нескольких источниках]" if news.get('trending') else ""
-            news_input += f"[{i}]{trending_mark} {news['title']}\n{news['summary'][:200]}\n\n"
+            news_input += f"[{i}]{trending_mark} {news['title']}\n{news['summary'][:1000]}\n\n"
 
         # 4. Генерация
         try:
