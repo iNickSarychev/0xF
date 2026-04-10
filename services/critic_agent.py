@@ -76,7 +76,7 @@ class CriticAgent:
                 feedback="Критик недоступен, текст пропущен автоматически.",
             )
 
-        return text.strip() # This is a cleanup of an old replacement artifact, I'll remove the whole method below
+
 
 
     async def rewrite(
