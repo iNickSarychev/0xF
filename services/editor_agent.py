@@ -4,10 +4,11 @@ import json
 import logging
 import re
 from typing import List, Dict, Tuple, Any, Optional
+import random
 from config import config
 from database import db
 from services.vector_service import vector_service
-from services.prompts import EDITOR_PROMPT, get_random_structure
+from services.prompts import EDITOR_PROMPT, GOLDEN_SAMPLES, get_random_structure
 from services.critic_agent import critic_agent
 from services.selector_agent import selector_agent
 
@@ -42,7 +43,7 @@ class EditorAgent:
                     raise e
 
     async def process_news_batch(
-        self, news_list: List[Dict[str, str]], temperature: float | None = None
+        self, news_list: List[Dict[str, str]], temperature: float | None = 0.5
     ) -> Tuple[str, Any, Optional[str]]:
         """
         Фильтрует новости по векторам и пишет пост.
@@ -96,17 +97,33 @@ class EditorAgent:
         best_news_idx = await selector_agent.select_best_news(news_list, theme)
         selected_news = news_list[best_news_idx]
 
-        # 4. Подготовка ввода для Писателя (EditorAgent)
+        # 4. Подготовка ввода для Писателя (EditorAgent) с метаданными
         trending_mark = " [TRENDING]" if selected_news.get('trending') else ""
-        news_input = f"{trending_mark} {selected_news['title']}\n{selected_news['summary'][:1200]}\n"
+        pub_time = selected_news.get('published', (0,0,0,0,0,0,0,0,0))
+        # Форматируем дату для контекста
+        date_str = f"{pub_time[2]:02d}.{pub_time[1]:02d}.{pub_time[0]}"
+        score = selected_news.get('trending_score', 0)
+        
+        news_input = (
+            f"DATE: {date_str}\n"
+            f"POPULARITY SCORE: {score}/10\n"
+            f"TRENDING: {trending_mark}\n"
+            f"TITLE: {selected_news['title']}\n"
+            f"SOURCE SUMMARY: {selected_news['summary'][:1200]}\n"
+        )
 
-        # 5. Генерация
+        # 5. Выбор Golden Samples (2 случайных примера)
+        samples = random.sample(GOLDEN_SAMPLES, 2)
+        samples_text = "\n\n---\n\n".join(samples)
+
+        # 6. Генерация
         try:
             chosen_structure = get_random_structure()
             logger.info(f"Post structure: {chosen_structure[:60]}...")
             prompt = EDITOR_PROMPT.format(
                 structure_block=chosen_structure,
                 news_input=news_input,
+                golden_samples=samples_text
             )
             
             llm_options: dict = {

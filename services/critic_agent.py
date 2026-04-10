@@ -14,6 +14,12 @@ logger = logging.getLogger(__name__)
 # Порог оценки, при котором текст считается одобренным
 APPROVAL_SCORE_THRESHOLD: int = 9
 
+FORBIDDEN_PHRASES = [
+    "TL;DR:", "Summary:", "In conclusion:", 
+    "Суть:", "Вердикт:", "Вывод:", "Итог:",
+    "Заключение:", "Подводя итог:", "В результате:"
+]
+
 
 @dataclass
 class CritiqueResult:
@@ -78,7 +84,21 @@ class CriticAgent:
                 feedback="Критик недоступен, текст пропущен автоматически.",
             )
 
-    async def rewrite(self, draft_text: str, feedback: str, news_input: str) -> str:
+    def _sanitize_text(self, text: str) -> str:
+        """Принудительно удаляет запрещенные фразы-заголовки из текста."""
+        for phrase in FORBIDDEN_PHRASES:
+            # Удаляем фразу в начале строки или после переноса и пробелов
+            # Используем регулярку для более точного удаления (включая двоеточие)
+            pattern = re.compile(rf"(?m)^\s*{re.escape(phrase)}\s*", re.IGNORECASE)
+            text = pattern.sub("", text)
+            # Также удаляем если фраза просто затесалась в тексте (на всякий случай)
+            text = text.replace(phrase, "")
+        
+        return text.strip()
+
+    async def rewrite(
+        self, draft_text: str, feedback: str, news_input: str, temperature: float = 0.5
+    ) -> str:
         """
         Просит модель переписать черновик по замечаниям критика.
         Возвращает исправленный текст (не JSON).
@@ -93,14 +113,21 @@ class CriticAgent:
                 model=self.model,
                 prompt=prompt,
                 stream=False,
-                options={"num_predict": 1024},
+                options={
+                    "num_predict": 1024,
+                    "temperature": temperature,
+                    "top_p": 0.9,
+                    "repeat_penalty": 1.1
+                },
             )
             rewritten = response["response"].strip()
 
             # Очищаем от возможных остатков JSON/markdown-обёрток
             rewritten = re.sub(r"^```[a-z]*\n?", "", rewritten)
             rewritten = re.sub(r"\n?```$", "", rewritten)
-            rewritten = rewritten.strip()
+            
+            # Принудительная очистка от мусорных заголовков
+            rewritten = self._sanitize_text(rewritten)
 
             logger.debug(f"Rewritten draft length: {len(rewritten)} chars")
             return rewritten
@@ -161,10 +188,14 @@ class CriticAgent:
 
             if iteration < max_iterations:
                 logger.info("Sending draft for rewrite...")
+                # Увеличиваем температуру с каждой итерацией для "креативности" исправлений
+                current_temp = 0.2 + (iteration * 0.15)
+                
                 current_draft = await self.rewrite(
                     draft_text=current_draft,
                     feedback=last_critique.feedback,
-                    news_input=news_input
+                    news_input=news_input,
+                    temperature=current_temp
                 )
             else:
                 logger.warning(

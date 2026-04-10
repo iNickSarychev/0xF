@@ -2,28 +2,110 @@
 import random
 
 # ─── Dynamic post structures for randomization ──────────────────────────────
-# Points 1 (Headline) and 2 (TL;DR) are fixed across all variants!
+# ─── Dynamic post structures for randomization ──────────────────────────────
 POST_STRUCTURES = [
     # Variant 1: Technical Breakdown (Deep Dive)
-    """1. Headline: <b>Bold, punchy headline</b>. 
-2. TL;DR: One sentence about what happened.
-3. How it works: Technical explanation. What's the architecture? What algorithm is used? Why is it better than previous methods? (Mandatory!)
-4. Practical context: Where to apply this tool/method today.
-5. Bottom line: Concrete impact on engineering/development.""",
+    """1. Headline: <b>Smart Headline (Benefit + Context)</b>. 
+2. TL;DR: One sentence about the core event.
+3. Mechanics: Technical details, architecture, algorithm. (Mandatory!)
+4. Why it matters: Strategic impact, comparison with competitors (e.g. "Better than X because Y").
+5. Bottom line: Concrete takeaway for developers.""",
 
     # Variant 2: Tool/Model Launch
-    """1. Headline: <b>Bold name of the tool/model</b>.
-2. TL;DR: What task does it solve?
-3. Architecture & Logic: Explain the implementation details. How did they achieve these results? (Mandatory!)
-4. Key numbers: Benchmarks, speed, context window size, or price.
-5. Verdict: Why a developer should care.""",
+    """1. Headline: <b>Benefit-oriented Headline (The result, not just the name)</b>.
+2. TL;DR: What painful problem does it solve?
+3. Architecture & Specs: Technical benchmarks, memory usage, training details. (Mandatory!)
+4. Why it matters: Why is this launch significant today compared to existing solutions?
+5. Practical takeaway: How to use it in production.""",
 
-    # Variant 3: Comparative Analysis
-    """1. Headline: <b>Bold comparison/trend headline</b>.
-2. TL;DR: The essence of the change.
-3. Mechanics of Change: How exactly does this new approach work differently? Detail the process. (Mandatory!)
-4. Winners/Losers: Who gains and who loses from this tech shift.
-5. Geeky takeaway: One final technical thought.""",
+    # Variant 3: Research/Paper
+    """1. Headline: <b>Intriguing Result-oriented Headline</b>.
+2. TL;DR: The main discovery in a nutshell.
+3. The "How-to": Explain the underlying math/graph/logic. How exactly does it work differently? (Mandatory!)
+4. Why it matters: How this shifts the SOTA or enterprise architecture.
+5. Verdict: One geeky technical thought on the future of this tech.""",
+]
+
+GOLDEN_SAMPLES = [
+    """<b>OpenClaw внедрил session pruning: экономия RAM агентов до 40%</b>
+
+Разработчики фреймворка OpenClaw решили проблему разрастания контекста в долгоживущих AI-агентах. Новая функция session pruning автоматически вычищает из оперативной памяти промежуточные логи вызова инструментов (tool calls), оставляя только смысловую выжимку диалога перед следующим инференсом модели.
+
+Технически это реализовано через фоновую оценку релевантности: алгоритм анализирует вес каждого блока данных для текущего шага рассуждений. Если лог работы инструмента больше не влияет на стейт агента, он сбрасывается на жесткий диск, освобождая контекстное окно.
+
+Для инженеров это означает возможность запускать сложные мульти-агентные пайплайны локально, значительно снижая затраты на API или риски словить Out Of Memory на длинных сессиях.""",
+
+    """<b>Mistral выпустила новую MoE-модель: 141B параметров, из которых активны только 32B</b>
+
+Архитектура Mixture-of-Experts продолжает вытеснять плотные модели. В новом релизе Mistral используется 8 независимых экспертных сетей, но при генерации каждого токена роутер активирует только две наиболее подходящие.
+
+Главное нововведение — обновленный механизм мартизации (routing algorithm). Исследователи внедрили балансировку нагрузки на уровне батчей, что предотвращает перекос, когда все токены отправляются только к одному "умному" эксперту. Это позволило увеличить общую пропускную способность инференса в 2.5 раза по сравнению с предыдущим поколением.
+
+Модель уже доступна в весах для локального запуска. По тестам на MMLU она обходит Llama 3 70B, требуя при этом железо уровня одной RTX 4090 для 4-битной квантованной версии.""",
+
+    """<b>GraphRAG от Microsoft: отказ от векторного поиска в пользу графов знаний</b>
+
+Microsoft Research предложила альтернативу классическому Retrieval-Augmented Generation, который часто теряет контекст при поиске по большим массивам слабосвязанных документов.
+
+Метод GraphRAG на этапе индексации использует LLM для извлечения сущностей и связей из сырого текста, формируя структурированный граф. При запросе пользователя система сначала ищет релевантные узлы графа, а затем генерирует ответ на основе их топологии.
+
+Бенчмарки показывают рост точности ответов (accuracy) на 30% на датасетах со сложной логикой, где требуется агрегация фактов из разных глав книги. Плата за такую точность — высокая стоимость индексации: создание графа требует в 4 раза больше токенов, чем простой эмбеддинг.""",
+
+    """<b>NVIDIA анонсировала оптимизацию KV-кэша на аппаратном уровне в чипах Blackwell</b>
+
+Проблема узкого горлышка памяти (memory wall) при генерации длинных текстов получила аппаратное решение. В архитектуре Blackwell реализована нативная поддержка сжатия Key-Value кэша.
+
+Вместо того чтобы хранить полные тензоры в HBM3e памяти, тензорные ядра 5-го поколения умеют "на лету" деквантовать KV-кэш из формата FP4 в FP8 прямо в регистрах чипа, минуя медленную глобальную память.
+
+На практике это позволяет увеличить размер контекстного окна в 4 раза на том же объеме VRAM без деградации скорости инференса (Time to First Token остается неизменным). Для дата-центров это радикальное снижение TCO при развертывании тяжелых LLM.""",
+
+    """<b>OpenAI снижает цены на GPT-4o API вдвое и вводит батч-обработку</b>
+
+Стоимость инференса флагманских моделей продолжает падать. Цена за 1 миллион входных токенов GPT-4o снижена до 5 долларов.
+
+Одновременно представлен Batch API: если разработчик готов ждать ответа до 24 часов, стоимость запросов падает еще на 50%, а лимиты на частоту запросов (Rate Limits) для таких задач существенно расширяются.
+
+Под капотом OpenAI явно оптимизировала утилизацию GPU в непиковые часы. Для разработчиков, запускающих асинронные задачи вроде массового парсинга, разметки датасетов или генерации синтетических данных, экономика проектов меняется кардинально — переход на локальные модели для этих задач теряет финансовый смысл.""",
+
+    """<b>Meta научила V-JEPA понимать физику объектов по видео без текстовой разметки</b>
+
+Лаборатория FAIR представила модель Video Joint Embedding Predictive Architecture (V-JEPA). Главная особенность: обучение происходит без привлечения текстовых описаний, исключительно методом self-supervised learning на сыром видео.
+
+Модель маскирует участки кадра во времени и пространстве, а затем пытается предсказать их скрытые представления (эмбеддинги), а не сами пиксели. Это заставляет нейросеть усваивать законы физики: гравитацию, инерцию и постоянство объектов.
+
+Архитектура показывает state-of-the-art результаты на бенчмарках Kinetics-400. В перспективе такой подход позволит роботам быстрее адаптироваться к физическому миру, обучаясь просто на видео с камер, минуя дорогостоящую ручную разметку.""",
+
+    """<b>Обнаружен универсальный джейлбрейк «Skeleton Key», обходящий защиту Claude и GPT-4</b>
+
+Исследователи безопасности выявили метод атаки на системные промпты ведущих LLM. Техника «Skeleton Key» не использует скрытые символы или сложные ролевые игры.
+
+Атака строится на перегрузке контекста инструкциями о "безопасном тестовом окружении" в сочетании с алгоритмом многошагового согласия. Модель искусственно загоняют в ветку рассуждений, где отказ от ответа противоречит ее базовой функции вежливости (alignment tax).
+
+Большинство вендоров уже выпустили патчи на уровне классификаторов запросов, однако фундаментальная уязвимость архитектуры трансформеров к отравлению контекста остается нерешенной. Разработчикам приложений рекомендуется использовать независимые фильтры на входе и выходе.""",
+
+    """<b>PyTorch 2.4 ускоряет компиляцию динамических графов на 30%</b>
+
+В новом релизе популярного ML-фреймворка основной фокус сделан на подсистему torch.compile. Разработчики переписали часть бэкенда Inductor.
+
+Теперь компилятор значительно лучше справляется с динамическими формами (dynamic shapes), что критически важно при инференсе LLM, где длина генерируемого ответа заранее неизвестна. Ранее это приводило к дорогостоящей перекомпиляции ядра на лету.
+
+Бенчмарки на моделях семейства Llama показывают снижение задержки инференса на 15-20% при использовании дефолтных настроек. Обновление обратно совместимо и требует лишь добавления одного декоратора к основному циклу.""",
+
+    """<b>Hugging Face представил FineWeb: 15 триллионов токенов чистого обучающего текста</b>
+
+Гонка качественных данных выходит на новый уровень. Опубликован датасет FineWeb, который устанавливает новый стандарт для претрейна открытых моделей.
+
+Главная ценность релиза — не объем, а пайплайн фильтрации. Команда применила каскад из эвристических фильтров, дедупликации на уровне MinHash и классификаторов качества на базе компактных LLM. Из исходного дампа Common Crawl было отброшено более 80% мусора и сгенерированного ИИ контента.
+
+Обученные на малом сабсете (10B токенов) тестовые модели показывают лучшие результаты на бенчмарках HellaSwag и ARC по сравнению с моделями, тренированными на C4 или RefinedWeb.""",
+
+    """<b>PostgreSQL 17 интегрирует нативный векторный индекс HNSW без сторонних расширений</b>
+
+Векторные базы данных теряют монополию. В PostgreSQL 17 добавлена встроенная поддержка индекса Hierarchical Navigable Small World, ранее доступная только через расширение pgvector.
+
+Глубокая интеграция в ядро СУБД позволила реализовать совместную фильтрацию (pre-filtering), когда поиск по векторам происходит одновременно с фильтрацией по обычным реляционным метаданным (например, дате или ID пользователя), что исключает сканирование лишних узлов графа.
+
+Это позволяет разработчикам строить полноценные RAG-приложения, используя классический SQL, без необходимости поддерживать отдельную инфраструктуру вроде Pinecone или Milvus. Задержка поиска по 10 миллионам векторов размерности 1536 составляет менее 5 миллисекунд.""",
 ]
 
 
@@ -65,53 +147,35 @@ EDITOR_PROMPT = """You are the author of a technology Telegram channel with 100,
 You write so that the text is easy to read on the first pass without any effort.
 
 TASK:
-Write a post based on the provided news item.
+Write a professional post based on the provided news item.
 
-KEY PRINCIPLE:
-The text must be as clear as possible.
-The reader should never have to re-read a sentence.
+REFERENCE EXAMPLES (Tone and Formatting Standards):
+Here are examples of the perfect technical posts. Notice the high density of facts, lack of filler, and strict adherence to formatting:
 
-STRUCTURE (MANDATORY):
+{golden_samples}
+
+---
+
+POST STRUCTURE (MANDATORY):
 {structure_block}
 
-TECHNICAL DEPTH (Hard Constraint):
+TECHNICAL DEPTH & ADDED VALUE:
 - No "water", no fluff, no "futurism". 
 - Focus only on: How is this trained? What's the architecture? What are the specific metrics?
-- If the news mentions a model, describe its parameters or training data specifics.
-- BE CONCRETE. Instead of "it is fast", write "latency reduced by 25% due to KV-cache optimization".
+- DO NOT just summarize; explain WHY it matters. Compare it with competitors (e.g. "Better than MemGPT because...").
+- BE CONCRETE. Headlines must contain the main profit (a number or a result), not just a fact. 
+- Example: "OpenClaw learned to clean memory on the fly: context savings up to 40%" instead of "OpenClaw presented session pruning".
 
-FORMATTING RULES:
-- The FIRST LINE must be a <b>Bold Headline</b>. You must use the exactly these HTML tags: <b>...</b>
-- No text should precede the headline.
-- Paragraphs must be rich and readable (4-6 lines maximum). Tell a story, don't just dump facts.
-- Use technical terminology correctly (LLM, RAG, LoRA, Quantization, etc.).
-- The news and its INTERNAL MECHANISM is your priority. 
+GLOSSARY & LANGUAGE:
+- Keep technical terms in English if they are standard (e.g., "KV-cache", "Checkpoint", "Inference", "Inference", "RAG", "LoRA").
+- The surrounding prose must be high-quality, professional literary Russian.
+- Paragraphs must be rich (4-6 lines maximum). Tell a story, don't just dump facts.
 
-STYLE:
-- Professional, engaging, and deeply analytical.
-- Avoid cheap marketing hype, but DON'T make it too dry! The text should feel like an exciting insider tech review.
-- The reader is a senior developer or AI researcher. Explain the innovation clearly but dynamically.
-
-ANTI-AI:
-- Don't use complex boilerplate constructions.
-- Avoid "beautiful but empty" phrases.
-
-ANTI-HALLUCINATION (CRITICAL):
-- Do NOT guess or invent technical details (architecture, algorithms, exact mechanism).
-- State ONLY facts explicitly present in the provided news text.
-- If the news text does not contain technical details, state the goal of the study/tool without inventing how it works.
-
-FORMATTING:
-- 800–1600 characters (Write a comprehensive, engaging overview! Expand on interesting details)
-- <b>Bold</b> only for headline, names, and numbers
-- Use "–" for lists if needed
-- No emojis and no hashtags
-- **CRITICAL**: Do NOT use <br> or <p> tags. Use only \n for line breaks.
-- Use only <b> and <i> tags. Any other HTML tags are forbidden.
-
-RULES:
-1. The post text MUST be in **RUSSIAN**, even if the news is in English!
-2. Compose IMAGE_QUERY in English.
+ANTI-AI & ANTI-HALLUCINATION:
+- State ONLY facts explicitly present in the provided news text or very well-known tech context (for comparisons).
+- No boilerplate constructions ("в современном мире", etc.).
+- 800–1600 characters. No emojis. No hashtags.
+- Use only <b> and <i> HTML tags. Use \\n for line breaks.
 
 RESPOND STRICTLY IN JSON FORMAT:
 {{{{
@@ -119,13 +183,7 @@ RESPOND STRICTLY IN JSON FORMAT:
         "post_text": "post text in Russian"
     }}}}
 
-    CRITICAL: Escape all double quotes inside "post_text" with backslash (e.g. \"text\"). Do not include any text outside the JSON block. Do not use Markdown blocks (```json).
-    
-    IMPORTANT: Write ONLY in literary Russian language, using standard technical terminology. Avoid hallucinated or distorted words.
-    
-No explanations outside of JSON.
-
-SELECTED NEWS TO WRITE ABOUT:
+SELECTED NEWS DATA:
 {news_input}
 """
 
@@ -154,10 +212,10 @@ WHAT TO CHECK:
    — First paragraph that is not a clear news summary and doesn't answer "what happened?"
    — Sentences that can be removed without losing meaning
 
-4. STRUCTURE & SUBSTANCE (Critical):
-   — Is there a <b>Bold Headline</b> on the first line? If not, REJECT (is_approved = false).
-   — SUBSTANCE OVER DELETION: Do not blindly command to "delete the paragraph". If a paragraph lacks facts, demand to EXPAND it with concrete facts, metrics, or technical details from the source. We want rich, informative posts (up to 1200 chars), not extremely short summaries.
-   — TECHNICAL & FACTUAL DEPTH: If the news is about a model/algorithm, demand the mechanism. If it's a product/business news, demand specific metrics, features, or context. 
+4. INFOSTYLE & GOLDEN SAMPLES (Critical):
+   — Use the provided Golden Samples as your quality benchmark.
+   — NO MODAL VERBS: Reject and demand removal of vague phrases like "может помочь", "является важным", "стоит отметить", "способен изменить". Use direct, strong statements.
+   — DELETE FILLER: Command to remove " Суть:", " TL;DR:", "Вердикт:" and similar headers if the Editorial bot included them.
    — Does the first paragraph answer "what exactly happened?" (If it's too vague, reduce score by 5).
    — CONCRETE FACTS: Numbers, specific names, metrics. 
 
@@ -193,9 +251,10 @@ EDITOR'S FEEDBACK:
 
 RULES:
 - You MUST strictly follow EVERY instruction from the EDITOR'S FEEDBACK.
-- If the editor asks to remove something (e.g. TL;DR, hashtags), REMOVE IT.
+- If the editor asks to remove something (e.g. TL;DR, hashtags, modal verbs), REMOVE IT.
 - If the editor asks to add something (e.g. technical metrics, facts), ADD IT.
 - Use the ORIGINAL NEWS SOURCE to verify facts, metrics and technical details. Do not hallucinate.
+- Negative constraints: NEVER include phrases like "TL;DR:", "Summary:", "In conclusion", "Суть:", "Вердикт:".
 - Don't change core meaning
 - Preserve HTML tags (<b>, <i>)
 - Text must be in Russian
