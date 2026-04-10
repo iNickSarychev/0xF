@@ -13,7 +13,7 @@ from services.text_processor import text_processor
 logger = logging.getLogger(__name__)
 
 # Порог оценки, при котором текст считается одобренным
-APPROVAL_SCORE_THRESHOLD: int = 9
+APPROVAL_SCORE_THRESHOLD: int = 8
 
 
 

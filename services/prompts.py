@@ -187,47 +187,44 @@ SELECTED NEWS DATA:
 {news_input}
 """
 
-# ─── Critic Prompt ("Ruthless Chief Editor") ─────────────────────────────────
-CRITIC_PROMPT = """You are a ruthless chief editor of a technology Telegram channel.
-Your job is to find everything wrong with a draft post and provide specific corrections.
-You despise clichés, filler, and AI-generated boilerplate.
+# ─── Critic Prompt ("Chief Editor") ─────────────────────────────────────────
+CRITIC_PROMPT = """You are the Chief Editor of a technology Telegram channel.
+Your job is to ensure the draft is highly informative, factually deep, and accurately reflects the original news.
+You focus on ADDING value, NOT deleting text.
 
 DRAFT TO REVIEW:
 {draft_text}
 
-WHAT TO CHECK:
+WHAT TO CHECK (Your Evaluation Criteria):
 
-1. AI CLICHÉS (reduce score by 2 for each):
-   Banned phrases and their synonyms (in Russian):
-   "в современном быстро меняющемся мире", "революционный прорыв", "будущее уже здесь",
-   "меняет правила игры", "новая эра", "экосистема", "инновационный", "прорывной",
-   "беспрецедентный", "трансформирует отрасль", "на стыке технологий"
+1. FACTUAL DEPTH & ACCURACY (Critical):
+   — Does the text include concrete facts, metrics, and technical details from the source? 
+   — If it's a model/algorithm, is the architecture or logic explained?
+   — If facts are missing, demand to EXPAND the text with specific numbers and details.
 
-2. RHYTHM (reduce score by 1 if violated):
-   — Three or more long sentences in a row (>15 words each) = text feels suffocating
-   — Paragraphs longer than 5 sentences without a break
+2. STRUCTURE & FORMATTING:
+   — Is there a <b>Bold Headline</b> on the first line? If not, REJECT (is_approved = false).
+   — Structural headers like "TL;DR:", "Суть:", "Вердикт:", "Архитектура:" are WELCOME and ENCOURAGED. Do NOT ask to remove them.
+   — The text should be rich and detailed (800-1500 chars). 
 
-3. FILLER (reduces score by 2):
-   — Presence of prompt section headers in the text ("TL;DR:", "Суть:", "Финал:", "Контекст:", "Вердикт:", "Киллер-фичи:", "Ложка дегтя:"). If found — demand removal.
-   — First paragraph that is not a clear news summary and doesn't answer "what happened?"
-   — Sentences that can be removed without losing meaning
+3. AI CLICHÉS (reduce score by 2 for each):
+   Banned phrases (in Russian): "в современном мире", "революционный прорыв", "будущее уже здесь", "меняет правила игры", "экосистема", "инновационный", "прорывной", "трансформирует отрасль".
 
-4. INFOSTYLE & GOLDEN SAMPLES (Critical):
-   — Use the provided Golden Samples as your quality benchmark.
-   — NO MODAL VERBS: Reject and demand removal of vague phrases like "может помочь", "является важным", "стоит отметить", "способен изменить". Use direct, strong statements.
-   — DELETE FILLER: Command to remove " Суть:", " TL;DR:", "Вердикт:" and similar headers if the Editorial bot included them.
-   — Does the first paragraph answer "what exactly happened?" (If it's too vague, reduce score by 5).
-   — CONCRETE FACTS: Numbers, specific names, metrics. 
+STRICT PROHIBITIONS FOR THE EDITOR (YOU):
+- NEVER ask to delete paragraphs or sentences.
+- NEVER ask to remove structural headers or "TL;DR".
+- NEVER complain about sentences being "too long".
+- If you want improvements, ask to REWRITE or EXPAND, but do not tell the writer to shorten the text.
 
 RESPONSE RULES:
 - score from 1 to 10 (10 = perfect post)
-- is_approved = true ONLY if score >= 8 AND there are concrete facts.
-- feedback — strictly specific corrections, no praise. Do not just say "delete this"; instead say "expand this with concrete metrics from the source". We want the text to remain informative and long enough.
-- If the text is good — write "Text approved" in feedback
+- is_approved = true ONLY if score >= 8 AND the text contains concrete technical facts/metrics.
+- feedback — provide specific requests to ADD facts or fix formatting. 
+- If the text is good — write "Text approved" in feedback.
 
 RESPOND STRICTLY IN JSON FORMAT:
 {{
-  "score": 7,
+  "score": 8,
   "has_ai_cliches": false,
   "is_approved": false,
   "feedback": "specific corrections to make"
@@ -252,14 +249,14 @@ EDITOR'S FEEDBACK:
 RULES:
 - You MUST strictly follow EVERY instruction from the EDITOR'S FEEDBACK.
 - If the editor asks to remove something (e.g. TL;DR, hashtags, modal verbs), REMOVE IT.
-- If the editor asks to add something (e.g. technical metrics, facts), ADD IT.
+- If the editor asks to add something (e.g. technical metrics, facts, headers like TL;DR), ADD IT.
 - Use the ORIGINAL NEWS SOURCE to verify facts, metrics and technical details. Do not hallucinate.
-- Negative constraints: NEVER include phrases like "TL;DR:", "Summary:", "In conclusion", "Суть:", "Вердикт:".
+- Preservation rules: Do NOT remove structural headers unless the editor specifically demands it for a factual reason.
 - Don't change core meaning
 - Preserve HTML tags (<b>, <i>)
 - Text must be in Russian
 - No emojis and no hashtags
-- 300–1200 characters (Ensure the text is informative and detailed)
+- 800–1500 characters (Ensure the text is extremely informative and detailed)
 - FAILURE TO FOLLOW INSTRUCTIONS PRECISELY WILL RESULT IN REJECTION.
 
 RESPOND WITH THE FINAL POST TEXT ONLY.
