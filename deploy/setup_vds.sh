@@ -4,8 +4,17 @@
 
 echo "🚀 Начинаем настройку сервера..."
 
-# 1. Обновление системы
+# 1. Обновление системы и настройка Swap (чтобы сервер не падал при сборке)
 sudo apt-get update && sudo apt-get upgrade -y
+
+if [ $(free -m | grep Swap | awk '{print $2}') -eq 0 ]; then
+    echo "💾 Создаем Swap-файл (2GB) для стабильной сборки..."
+    sudo fallocate -l 2G /swapfile
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+fi
 
 # 2. Установка Python и зависимостей
 sudo apt-get install -y python3-pip python3-venv git curl ffmpeg
