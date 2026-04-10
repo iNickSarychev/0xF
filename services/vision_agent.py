@@ -11,7 +11,7 @@ from services.llm_gateway import llm_gateway
 logger = logging.getLogger(__name__)
 
 class VisionAgent:
-    def __init__(self, model: str = "llava:7b"):
+    def __init__(self, model: str = config.OLLAMA_MODEL):
         self.model = model
 
     async def check_image(self, post_text: str, image_url: str) -> bool:

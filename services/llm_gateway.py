@@ -45,7 +45,6 @@ class LLMGateway:
         # Базовые опции стабильности
         base_options = {
             "num_ctx": 8192,
-            "temperature": 0.7,
             "num_thread": 4, 
             "low_vram": True,
         }
