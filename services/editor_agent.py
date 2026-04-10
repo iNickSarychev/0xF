@@ -19,18 +19,11 @@ class EditorAgent:
         self, news_list: List[Dict[str, str]], temperature: float | None = 0.5
     ) -> Tuple[str, Any, Optional[str]]:
         """
-        Фильтрует новости по векторам и пишет пост.
-        Возвращает (текст_статьи, selected_news, image_query).
-        
-        Args:
-            news_list: список новостей для обработки.
-            temperature: температура генерации (None — из Modelfile, 0.9 — творческий режим).
+        Фильтрует новости и пытается сгенерировать пост, используя fallback-цикл по лучшим новостям.
         """
         try:
-            # 1. Получаем эмбеддинги параллельно
+            # 1. Сначала фильтруем весь входящий список (дубликаты и отклоненные)
             news_list = await vector_service.get_embeddings_batch(news_list)
-            
-            # 2. Фильтрация
             rejected_data = db.get_all_rejected_vectors()
             sent_data = db.get_all_sent_vectors()
             filtered_news = []
@@ -41,55 +34,70 @@ class EditorAgent:
                     continue
                     
                 is_rejected_or_dup = False
-                # Проверка на отклоненные
                 for _, rej_vec in rejected_data:
                     if vector_service.cosine_similarity(news['vector'], rej_vec) > 0.85:
                         is_rejected_or_dup = True
                         break
                 
-                # Проверка на дубликаты
                 if not is_rejected_or_dup:
                     for _, sent_vec in sent_data:
                         if vector_service.cosine_similarity(news['vector'], sent_vec) > 0.88:
                             is_rejected_or_dup = True
-                            logger.info(f"Duplicate blocked: {news['title']}")
                             break
                             
                 if not is_rejected_or_dup:
                     filtered_news.append(news)
             
-            news_list = filtered_news
-            if not news_list:
+            if not filtered_news:
                 return "🤷 Все новости были отфильтрованы как дубликаты или неинтересные темы.", None, None
                 
+            # 2. Получаем отсортированный список новостей по рейтингу
+            theme = db.get_theme()
+            scored_news = selector_agent.get_all_scores(filtered_news)
+            
+            if not scored_news:
+                return "🤷 Нет новостей, подходящих под критерии AI/Tech.", None, None
+
+            # 3. Fallback-цикл: пробуем 3 лучшие новости
+            # Берем максимум 3 попытки
+            max_fallback_attempts = min(3, len(scored_news))
+            
+            for attempt_idx in range(max_fallback_attempts):
+                news_idx, score = scored_news[attempt_idx]
+                selected_news = filtered_news[news_idx]
+                
+                logger.info(f"Fallback Attempt {attempt_idx + 1}/{max_fallback_attempts} | News: {selected_news['title'][:60]}... | Score: {score:.2f}")
+                
+                result = await self._try_generate_post(selected_news, score)
+                if result:
+                    article_text, image_query = result
+                    return article_text, selected_news, image_query
+                
+                logger.warning(f"Attempt {attempt_idx + 1} failed for '{selected_news['title'][:30]}...'. Trying next news...")
+
+            return "🤷 Не удалось сгенерировать качественный пост после нескольких попыток.", None, None
+
         except Exception as e:
-            logger.error(f"Error in news filtering: {e}")
+            logger.error(f"Error in process_news_batch: {e}")
+            return f"Критическая ошибка: {str(e)}", None, None
 
-        # 3. Передаем список SelectorAgent'у
-        theme = db.get_theme()
-        best_news_idx = await selector_agent.select_best_news(news_list, theme)
-        selected_news = news_list[best_news_idx]
-
-        # 4. Подготовка ввода для Писателя (EditorAgent) с метаданными
-        trending_mark = " [TRENDING]" if selected_news.get('trending') else ""
-        pub_time = selected_news.get('published', (0,0,0,0,0,0,0,0,0))
-        # Форматируем дату для контекста
-        date_str = f"{pub_time[2]:02d}.{pub_time[1]:02d}.{pub_time[0]}"
-        score = selected_news.get('trending_score', 0)
-        
-        news_input = (
-            f"DATE: {date_str}\n"
-            f"POPULARITY SCORE: {score}/10\n"
-            f"TRENDING: {trending_mark}\n"
-            f"TITLE: {selected_news['title']}\n"
-            f"SOURCE SUMMARY: {selected_news['summary'][:800]}\n"
-        )
-        logger.debug(f"EDITOR_INPUT_NEWS:\n{news_input}")
-
-        # 5. Генерация (Zero-shot режим, без GOLDEN_SAMPLES)
+    async def _try_generate_post(self, selected_news: Dict, score: float) -> Optional[Tuple[str, str]]:
+        """Внутренняя попытка генерации для конкретной новости."""
         try:
+            # Подготовка ввода
+            pub_time = selected_news.get('published', (0,0,0,0,0,0,0,0,0))
+            date_str = f"{pub_time[2]:02d}.{pub_time[1]:02d}.{pub_time[0]}"
+            trending_mark = " [TRENDING]" if selected_news.get('trending') else ""
+            
+            news_input = (
+                f"DATE: {date_str}\n"
+                f"POPULARITY SCORE: {score:.1f}/10\n"
+                f"TRENDING: {trending_mark}\n"
+                f"TITLE: {selected_news['title']}\n"
+                f"SOURCE SUMMARY: {selected_news['summary'][:800]}\n"
+            )
+
             chosen_structure = get_random_structure()
-            logger.info(f"Post structure: {chosen_structure[:60]}...")
             prompt = EDITOR_PROMPT.format(
                 structure_block=chosen_structure,
                 news_input=news_input
@@ -102,33 +110,32 @@ class EditorAgent:
             )
             
             raw_content = response['response'].strip()
-            logger.debug(f"Editor Raw Result (first 500 chars): {raw_content[:500]}...")
-            logger.debug(f"Editor LLM JSON: {raw_content}")
-            
             data = text_processor.safe_json_loads(raw_content)
             
             image_query = data.get("image_query")
             article_text = data.get("post_text", "").strip()
+            
+            if not article_text:
+                return None
 
-            # Принудительная очистка и балансировка HTML для первого черновика
             article_text = text_processor.clean_llm_output(article_text)
 
-            # 5. Reflection Loop: отправляем черновик Критику
+            # Reflection Loop (1 итерация)
             article_text, critique = await critic_agent.run_reflection_loop(
                 initial_draft=article_text,
                 news_input=news_input,
                 max_iterations=1,
             )
-            logger.info(
-                f"Final critic score: {critique.score}/10 | "
-                f"Approved: {critique.is_approved}"
-            )
-
-            return article_text, selected_news, image_query
+            
+            if critique.is_approved or critique.score >= 7:
+                return article_text, image_query or selected_news['title']
+            
+            logger.warning(f"Critique rejected news. Score: {critique.score}")
+            return None
 
         except Exception as e:
-            logger.error(f"Error in EditorAgent generation: {e}")
-            return f"Ошибка при генерации статьи: {str(e)}", None, None
+            logger.error(f"Try generate post error: {e}")
+            return None
 
     async def is_available(self) -> bool:
         try:

@@ -69,7 +69,7 @@ scheduler = AsyncIOScheduler(timezone=msk_tz)
 
 # Счётчик подряд идущих сбоев LLM для алертов
 _llm_failure_streak: int = 0
-LLM_ALERT_THRESHOLD: int = 5
+LLM_ALERT_THRESHOLD: int = 2
 
 
 # ─── FSM: причина отклонения с обучением ─────────────────────────────────────

@@ -21,7 +21,7 @@ class LLMGateway:
             cls._instance = super(LLMGateway, cls).__new__(cls)
         return cls._instance
 
-    def __init__(self, host: str = config.OLLAMA_BASE_URL, timeout: float = 300.0, keep_alive: str = config.OLLAMA_KEEP_ALIVE):
+    def __init__(self, host: str = config.OLLAMA_BASE_URL, timeout: float = 600.0, keep_alive: str = config.OLLAMA_KEEP_ALIVE):
         if not hasattr(self, 'initialized'):
             self.client = ollama.AsyncClient(
                 host=host,
