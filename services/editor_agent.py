@@ -9,6 +9,7 @@ from database import db
 from services.vector_service import vector_service
 from services.prompts import EDITOR_PROMPT, get_random_structure
 from services.critic_agent import critic_agent
+from services.selector_agent import selector_agent
 
 logger = logging.getLogger(__name__)
 
@@ -90,13 +91,16 @@ class EditorAgent:
         except Exception as e:
             logger.error(f"Error in news filtering: {e}")
 
-        # 3. Подготовка ввода для LLM
-        news_input = ""
-        for i, news in enumerate(news_list, 1):
-            trending_mark = " [TRENDING — тема в нескольких источниках]" if news.get('trending') else ""
-            news_input += f"[{i}]{trending_mark} {news['title']}\n{news['summary'][:1000]}\n\n"
+        # 3. Передаем список SelectorAgent'у
+        theme = db.get_theme()
+        best_news_idx = await selector_agent.select_best_news(news_list, theme)
+        selected_news = news_list[best_news_idx]
 
-        # 4. Генерация
+        # 4. Подготовка ввода для Писателя (EditorAgent)
+        trending_mark = " [TRENDING]" if selected_news.get('trending') else ""
+        news_input = f"{trending_mark} {selected_news['title']}\n{selected_news['summary'][:1200]}\n"
+
+        # 5. Генерация
         try:
             chosen_structure = get_random_structure()
             logger.info(f"Post structure: {chosen_structure[:60]}...")
@@ -118,14 +122,9 @@ class EditorAgent:
             )
             
             raw_content = response['response'].strip()
-            logger.debug(f"LLM JSON: {raw_content}")
+            logger.debug(f"Editor LLM JSON: {raw_content}")
             
             data = self._safe_json_loads(raw_content)
-            
-            # Извлечение данных
-            idx_val = data.get("selected_index") or data.get("selected_news_index", 1)
-            idx = int(idx_val) - 1
-            selected_news = news_list[idx] if 0 <= idx < len(news_list) else news_list[0]
             
             image_query = data.get("image_query")
             article_text = data.get("post_text", "").strip()
