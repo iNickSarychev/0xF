@@ -1,77 +1,44 @@
 #!/bin/bash
-# =============================================================
-# 0xFUTURE Bot — VDS Setup Script (Ubuntu 22.04 / 24.04)
-# =============================================================
-set -e
 
-echo "========================================"
-echo "  0xFUTURE Bot — VDS Setup"
-echo "========================================"
+# Скрипт настройки VDS для Бота 0xFUTURE и Media-X (Go)
 
-# --- 1. Обновление системы ---
-echo "[1/6] Updating system..."
-apt update && apt upgrade -y
+echo "🚀 Начинаем настройку сервера..."
 
-# --- 2. Установка зависимостей ---
-echo "[2/6] Installing Python, Git, and essentials..."
-apt install -y python3 python3-pip python3-venv git curl
+# 1. Обновление системы
+sudo apt-get update && sudo apt-get upgrade -y
 
-# --- 3. Установка Tailscale ---
-echo "[3/6] Installing Tailscale VPN..."
-curl -fsSL https://tailscale.com/install.sh | sh
-echo ""
-echo "============================================"
-echo "  ВАЖНО: Запусти Tailscale авторизацию:"
-echo "  sudo tailscale up"
-echo "  Откроется ссылка — залогинься в браузере."
-echo "============================================"
-echo ""
+# 2. Установка Python и зависимостей
+sudo apt-get install -y python3-pip python3-venv git curl ffmpeg
 
-# --- 4. Клонирование проекта ---
-echo "[4/6] Cloning project from GitHub..."
-if [ -d "/opt/0xf" ]; then
-    echo "Directory /opt/0xf already exists, pulling latest..."
-    cd /opt/0xf && git pull
-else
-    git clone https://github.com/NickSarychev/0xF.git /opt/0xf
+# 3. Установка Docker (если не установлен)
+if ! command -v docker &> /dev/null; then
+    echo "🐳 Устанавливаем Docker..."
+    curl -fsSL https://get.docker.com -o get-docker.sh
+    sudo sh get-docker.sh
+    sudo usermod -aG docker $USER
+    echo "Docker установлен."
 fi
 
-# --- 5. Создание виртуального окружения ---
-echo "[5/6] Setting up Python virtual environment..."
-cd /opt/0xf
-python3 -m venv venv
+# 4. Настройка проекта
+cd ~/PRO || { echo "❌ Директория ~/PRO не найдена!"; exit 1; }
+git pull
+
+# 5. Сборка и запуск Media-X (Go)
+echo "🐹 Сборка Media-X сервера..."
+cd media-x
+sudo docker stop media-x || true
+sudo docker rm media-x || true
+sudo docker build -t 0xf-media-x .
+sudo docker run -d --name media-x --restart always -p 8080:8080 0xf-media-x
+cd ..
+
+# 6. Настройка Python окружения
+if [ ! -d "venv" ]; then
+    python3 -m venv venv
+fi
 source venv/bin/activate
-pip install --upgrade pip
 pip install -r requirements.txt
 
-# --- 6. Создание .env файла ---
-echo "[6/6] Creating .env template..."
-if [ ! -f "/opt/0xf/.env" ]; then
-    cat > /opt/0xf/.env << 'ENVFILE'
-BOT_TOKEN=your_bot_token_here
-OLLAMA_MODEL=gemma4
-OLLAMA_BASE_URL=http://TAILSCALE_IP_OF_YOUR_PC:11434
-CHANNEL_ID=@AxFUTURE
-ADMIN_CHAT_ID=341481395
-ENVFILE
-    echo ""
-    echo "============================================"
-    echo "  ВАЖНО: Отредактируй /opt/0xf/.env"
-    echo "  nano /opt/0xf/.env"
-    echo "  - BOT_TOKEN: вставь токен бота"
-    echo "  - OLLAMA_BASE_URL: замени на Tailscale IP"
-    echo "============================================"
-else
-    echo ".env already exists, skipping."
-fi
-
-echo ""
-echo "========================================"
-echo "  Setup complete!"
-echo "  Next steps:"
-echo "  1. sudo tailscale up"
-echo "  2. nano /opt/0xf/.env"
-echo "  3. sudo cp /opt/0xf/deploy/bot.service /etc/systemd/system/"
-echo "  4. sudo systemctl daemon-reload"
-echo "  5. sudo systemctl enable --now 0xf-bot"
-echo "========================================"
+echo "✅ Настройка завершена!"
+echo "⚠️  Не забудьте обновить .env файл, прописав Tailscale IP вашего ПК в OLLAMA_BASE_URL."
+echo "Запустите бота командой: source venv/bin/activate && python3 main.py"

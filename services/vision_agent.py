@@ -1,63 +1,54 @@
-import httpx
-import base64
 import logging
-import io
-from PIL import Image
+import aiohttp
+from typing import Optional
 from config import config
-from services.prompts import VISION_PROMPT
-from services.llm_gateway import llm_gateway
 
 logger = logging.getLogger(__name__)
 
 class VisionAgent:
-    def __init__(self, model: str = config.OLLAMA_MODEL):
-        self.model = model
+    """
+    Отвечает за визуальное сопровождение постов.
+    Использует Media-X (Go-сервер) для интеллектуального поиска фото.
+    """
+    def __init__(self):
+        self.media_x_url = f"{config.MEDIA_X_URL}/v1/extract"
 
-    async def check_image(self, post_text: str, image_url: str) -> bool:
-        """Проверяет релевантность картинки через LLaVA."""
-        if not await self.is_available():
-            logger.warning("VisionAgent: Ollama is offline. Skipping image.")
+    async def get_best_image(self, article_url: str, query: str = None) -> Optional[str]:
+        """
+        Ищет наилучшее изображение для статьи через микросервис Media-X.
+        """
+        if not article_url:
+            return None
+
+        image_url = await self._extract_from_media_x(article_url)
+        if image_url:
+            logger.info(f"Media-X found image: {image_url}")
+            return image_url
+
+        return None
+
+    async def check_image(self, title: str, image_url: str) -> bool:
+        """
+        Заглушка для проверки релевантности изображения через VLM.
+        В будущем здесь можно добавить запрос к LLaVA/Gemma-Vision.
+        Сейчас просто одобряет любое непустое изображение.
+        """
+        if not image_url:
             return False
-            
+        return True
+
+    async def _extract_from_media_x(self, url: str) -> Optional[str]:
+        """Запрос к микросервису Media-X (Go)."""
         try:
-            # Скачивание картинки
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(image_url, timeout=10)
-                if resp.status_code != 200:
-                    return False
-                image_bytes = resp.content
-
-            # Сжимаем картинку до 512x512 для экономии ресурсов Ollama (защита от OOM)
-            with Image.open(io.BytesIO(image_bytes)) as img:
-                img.thumbnail((512, 512))
-                output = io.BytesIO()
-                # Используем JPEG для уменьшения объема данных
-                img.save(output, format="JPEG", quality=85)
-                image_b64 = base64.b64encode(output.getvalue()).decode('utf-8')
-
-            prompt = VISION_PROMPT.format(post_text=post_text)
-            
-            response = await llm_gateway.generate(
-                model=self.model,
-                prompt=prompt,
-                images=[image_b64],
-                options={"num_predict": 10, "temperature": 0.5},
-                keep_alive="5m"
-            )
-            
-            answer = response['response'].strip().upper()
-            logger.info(f"Vision verdict for {image_url}: {answer}")
-            return "YES" in answer
-
+            async with aiohttp.ClientSession() as session:
+                payload = {"url": url}
+                async with session.post(self.media_x_url, json=payload, timeout=15) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get("status") == "success":
+                            return data.get("image_url")
         except Exception as e:
-            logger.error(f"VisionAgent error: {e}")
-            return False
-
-    async def is_available(self) -> bool:
-        try:
-            await llm_gateway.client.list()
-            return True
-        except Exception:
-            return False
+            logger.error(f"Error calling Media-X service: {e}")
+        return None
 
 vision_agent = VisionAgent()

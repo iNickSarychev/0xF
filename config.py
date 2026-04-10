@@ -11,6 +11,7 @@ class Config:
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "1m")
     DB_PATH = os.getenv("DB_PATH", "news.db")
+    MEDIA_X_URL = os.getenv("MEDIA_X_URL", "http://localhost:8080")
     CHANNEL_ID = os.getenv("CHANNEL_ID", "@AxFUTURE")
     ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "341481395"))
 

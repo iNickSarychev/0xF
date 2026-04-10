@@ -207,46 +207,23 @@ def _truncate_article(article_text: str) -> str:
 
 async def _find_valid_image(news_item: dict, image_query: str | None) -> str | None:
     """
-    Ищет валидную картинку по трём стратегиям:
-    1. RSS-картинка → 2. og:image из статьи → 3. DuckDuckGo.
+    Ищет валидную картинку:
+    1. Media-X (наш Go-сервер) -> 2. DuckDuckGo (резерв).
     """
-    # 1. RSS-картинка
-    rss_image = news_item.get("image")
-    if rss_image and await image_handler.is_valid_image(rss_image):
-        if await vision_agent.check_image(news_item.get("title", ""), rss_image):
-            logger.info(f"Using valid image from RSS: {rss_image}")
-            return rss_image
-        logger.info(f"Vision rejected RSS image: {rss_image}")
-
-    # 2. og:image из оригинальной статьи
-    if news_item.get("link"):
-        logger.info("Parsing original article for og:image...")
-        extracted_img = await image_handler.extract_article_image(news_item["link"])
-        if extracted_img and await vision_agent.check_image(
-            news_item.get("title", ""), extracted_img
-        ):
-            logger.info(f"Using og:image: {extracted_img}")
-            return extracted_img
+    # 1. Пробуем извлечь оригинал через наш Go-сервер
+    article_url = news_item.get("link")
+    if article_url:
+        logger.info(f"Requesting Media-X for: {article_url}")
+        extracted_img = await vision_agent.get_best_image(article_url)
         if extracted_img:
-            logger.info(f"Vision rejected og:image: {extracted_img}")
+            return extracted_img
 
-    # 3. DuckDuckGo
+    # 2. Резервный поиск через DuckDuckGo (если в статье нет фото)
     if image_query:
-        logger.info(f"Searching DDG: '{image_query}'")
+        logger.info(f"Falling back to DDG search for: '{image_query}'")
         ddg_img = await image_handler.find_best_image(query=image_query)
-        if ddg_img and await vision_agent.check_image(
-            news_item.get("title", ""), ddg_img
-        ):
-            logger.info(f"DDG image approved: {ddg_img}")
-            return ddg_img
         if ddg_img:
-            logger.info(f"Vision rejected DDG image: {ddg_img}")
-
-    # Fallback: Если всё отклонено, но картинки были — берем первую попавшуюся
-    fallback_img = rss_image or extracted_img or ddg_img
-    if fallback_img:
-        logger.info(f"Fallback: Using first available image despite Vision rejection: {fallback_img}")
-        return fallback_img
+            return ddg_img
 
     return None
 
