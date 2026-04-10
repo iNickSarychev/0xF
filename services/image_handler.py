@@ -25,7 +25,7 @@ WATERMARK_DOMAINS = [
 
 
 class ImageHandler:
-    def __init__(self, min_width: int = 800):
+    def __init__(self, min_width: int = 600):
         self.min_width = min_width
 
     def _is_stock_url(self, url: str) -> bool:

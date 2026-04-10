@@ -192,13 +192,16 @@ EDITOR'S FEEDBACK:
 {feedback}
 
 RULES:
-- Fix only what the editor pointed out
+- You MUST strictly follow EVERY instruction from the EDITOR'S FEEDBACK.
+- If the editor asks to remove something (e.g. TL;DR, hashtags), REMOVE IT.
+- If the editor asks to add something (e.g. technical metrics, facts), ADD IT.
 - Use the ORIGINAL NEWS SOURCE to verify facts, metrics and technical details. Do not hallucinate.
 - Don't change core meaning
 - Preserve HTML tags (<b>, <i>)
 - Text must be in Russian
 - No emojis and no hashtags
 - 300–1200 characters (Ensure the text is informative and detailed)
+- FAILURE TO FOLLOW INSTRUCTIONS PRECISELY WILL RESULT IN REJECTION.
 
 RESPOND WITH THE FINAL POST TEXT ONLY.
 ANY introductory words, apologies, or phrases like "Here is the corrected text", "Sure", "Done" are FORBIDDEN. Start directly with the <b>bold headline</b>.

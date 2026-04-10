@@ -123,6 +123,7 @@ class EditorAgent:
                 stream=False,
                 format="json",
                 options=llm_options,
+                keep_alive="5m"
             )
             
             raw_content = response['response'].strip()

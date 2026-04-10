@@ -2,6 +2,8 @@ import ollama
 import httpx
 import base64
 import logging
+import io
+from PIL import Image
 from typing import Optional
 from config import config
 from services.prompts import VISION_PROMPT
@@ -29,7 +31,14 @@ class VisionAgent:
                 if resp.status_code != 200:
                     return False
                 image_bytes = resp.content
-                image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+
+            # Сжимаем картинку до 512x512 для экономии ресурсов Ollama (защита от OOM)
+            with Image.open(io.BytesIO(image_bytes)) as img:
+                img.thumbnail((512, 512))
+                output = io.BytesIO()
+                # Используем JPEG для уменьшения объема данных
+                img.save(output, format="JPEG", quality=85)
+                image_b64 = base64.b64encode(output.getvalue()).decode('utf-8')
 
             prompt = VISION_PROMPT.format(post_text=post_text)
             
@@ -38,7 +47,8 @@ class VisionAgent:
                 prompt=prompt,
                 images=[image_b64],
                 stream=False,
-                options={"num_predict": 10, "temperature": 0.5}
+                options={"num_predict": 10, "temperature": 0.5},
+                keep_alive="5m"
             )
             
             answer = response['response'].strip().upper()

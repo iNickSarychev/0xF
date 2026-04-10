@@ -130,6 +130,8 @@ class CriticAgent:
         last_critique = CritiqueResult(
             score=0, has_ai_cliches=False, is_approved=False, feedback=""
         )
+        previous_score = -1
+        stall_counter = 0
 
         for iteration in range(1, max_iterations + 1):
             logger.info(f"Reflection loop iteration {iteration}/{max_iterations}")
@@ -145,6 +147,17 @@ class CriticAgent:
             if last_critique.is_good_enough:
                 logger.info(f"Text approved on iteration {iteration}.")
                 break
+            
+            # Проверка на отсутствие прогресса (Stall Detection)
+            if last_critique.score <= previous_score:
+                stall_counter += 1
+                if stall_counter >= 2:
+                    logger.warning("Score stalled for 2 iterations. Stopping rewrite loop.")
+                    break
+            else:
+                stall_counter = 0
+            
+            previous_score = last_critique.score
 
             if iteration < max_iterations:
                 logger.info("Sending draft for rewrite...")
