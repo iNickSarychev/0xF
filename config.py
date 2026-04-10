@@ -20,7 +20,7 @@ class Config:
         "https://blog.google/technology/ai/rss/",
         "https://openai.com/blog/rss.xml",
         "https://deepmind.google/blog/rss.xml",
-        "https://ai.meta.com/blog/rss/",
+        "https://ai.meta.com/blog/feed/",
         # AI-новости
         "https://techcrunch.com/category/artificial-intelligence/feed/",
         "https://www.wired.com/feed/tag/ai/latest/rss",
@@ -29,6 +29,19 @@ class Config:
         "https://feeds.arstechnica.com/arstechnica/technology-lab",
         "https://www.technologyreview.com/feed/",
         "https://www.theverge.com/rss/index.xml",
+        # 🧠 AI-лаборатории и профильные фреймворки (дополнение)
+        "https://www.anthropic.com/feed.xml", # Claude сейчас часто обходит GPT в кодинге
+        "https://blog.langchain.dev/rss/", # Главный фреймворк для сборки AI-агентов
+    
+        # 🔬 Хардкор и сырые исследования (arXiv)
+         "https://export.arxiv.org/rss/cs.AI", # Свежие пейперы по искусственному интеллекту
+        "https://export.arxiv.org/rss/cs.CL", # Computation and Language (все новые LLM появляются тут)
+    
+         # 👨‍💻 Комьюнити разработчиков (инсайты с полей)
+        "https://hnrss.org/newest?q=AI", # Фильтр Hacker News по теме AI — абсолютный мастхэв
+        "https://hnrss.org/newest?q=LLM", # Фильтр Hacker News по LLM
+        "https://dev.to/feed/tag/ai", # Практические статьи от разработчиков
+        "https://dev.to/feed/tag/prompt-engineering", # Трюки по промптингу
     ]
 
 
