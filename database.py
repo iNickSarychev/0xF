@@ -76,19 +76,20 @@ class Database:
             """)
             conn.commit()
 
-            # Всегда синхронизируем ленты из конфига с БД (новые добавятся, старые проигнорируются)
+            # Синхронизируем ленты из конфига с БД (удаляем старые, добавляем новые)
+            current_config_feeds = set(config.RSS_FEEDS)
+            
+            # 1. Удаляем из БД те, которых нет в новом конфиге
+            cursor = conn.execute("SELECT url FROM sources")
+            db_feeds = [row[0] for row in cursor.fetchall()]
+            for db_feed in db_feeds:
+                if db_feed not in current_config_feeds:
+                    conn.execute("DELETE FROM sources WHERE url = ?", (db_feed,))
+                    logger.info(f"Removed deprecated RSS source: {db_feed}")
+            
+            # 2. Добавляем новые из конфига
             for feed in config.RSS_FEEDS:
                 conn.execute("INSERT OR IGNORE INTO sources (url) VALUES (?)", (feed,))
-            
-            # Удаляем 404 адреса, чтобы бот не стучался впустую
-            bad_feeds = [
-                "https://ai.meta.com/blog/rss/",
-                "https://ai.meta.com/blog/feed/",
-                "https://www.anthropic.com/feed.xml",
-                "https://dev.to/feed/tag/prompt-engineering"
-            ]
-            for bad_feed in bad_feeds:
-                conn.execute("DELETE FROM sources WHERE url = ?", (bad_feed,))
             
             conn.commit()
                 
