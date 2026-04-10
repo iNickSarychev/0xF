@@ -137,8 +137,6 @@ async def publish_to_channel(article_text: str, image_url: str = None) -> None:
         logger.info("Article published to channel.")
     except Exception as exc:
         logger.error(f"Failed to publish to channel: {exc}")
-        except Exception as fallback_exc:
-            logger.error(f"Fallback publish also failed: {fallback_exc}")
 
 
 # ─── Автопубликация по таймеру ────────────────────────────────────────────────
@@ -309,18 +307,16 @@ async def _send_to_admin(
         )
     except Exception as exc:
         logger.error(f"Error sending to admin: {exc}")
-        return None
-    except Exception as exc:
-        logger.error(f"Error sending to admin (likely photo issue): {exc}")
+        # Самый последний рубеж: пробуем текст без всего
         try:
             return await bot.send_message(
                 chat_id,
-                f"📝 <b>На модерацию (без фото):</b>\n\n{final_text}",
+                f"📝 <b>На модерацию (текст):</b>\n\n{final_text[:3000]}",
                 reply_markup=keyboard,
                 request_timeout=60,
             )
         except Exception as exc2:
-            logger.error(f"Critical send error: {exc2}")
+            logger.error(f"Critical admin send error: {exc2}")
             return None
 
 
@@ -749,10 +745,12 @@ async def cmd_news(message: types.Message) -> None:
             )
             status_msg_id = sent_msg.message_id
         except Exception as exc:
-        except Exception as exc:
             logger.error(f"Error sending manual news: {exc}")
             try:
-                sent_msg = await message.answer(final_text, reply_markup=keyboard)
+                sent_msg = await message.answer(
+                    f"⚠️ <b>Ошибка отправки фото, дубль текстом:</b>\n\n{final_text}", 
+                    reply_markup=keyboard
+                )
                 status_msg_id = sent_msg.message_id
             except Exception as exc2:
                 logger.error(f"Critical HTML formatting error: {exc2}")
