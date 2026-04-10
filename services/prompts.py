@@ -79,11 +79,13 @@ RULES:
 
 RESPOND STRICTLY IN JSON FORMAT:
 {{{{
-  "selected_index": 1,
-  "image_query": "search query for image",
-  "post_text": "post text in Russian"
-}}}}
+        "selected_index": integer, 
+        "image_query": "search query for image in English",
+        "post_text": "post text in Russian"
+    }}}}
 
+    CRITICAL: Escape all double quotes inside "post_text" with backslash (e.g. \"text\"). Do not include any text outside the JSON block. Do not use Markdown blocks (```json).
+    
 No explanations outside of JSON.
 
 NEWS:

@@ -20,6 +20,26 @@ class EditorAgent:
             timeout=httpx.Timeout(300.0, connect=10.0)
         )
 
+    def _safe_json_loads(self, text: str) -> dict:
+        """Попытка починить и распарсить JSON от LLM."""
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            # Очистка от возможных Markdown-блоков
+            clean_text = re.sub(r'^```json\s*|\s*```$', '', text.strip(), flags=re.MULTILINE)
+            try:
+                return json.loads(clean_text)
+            except json.JSONDecodeError as e:
+                # Если всё совсем плохо, пробуем совсем грубую очистку
+                # (иногда LLM не экранирует кавычки внутри строк)
+                logger.warning(f"JSON standard parse failed, trying aggressive fix: {e}")
+                # Это очень упрощенный фикс, но часто помогает
+                fixed_text = text.replace('\n', ' ').replace('\r', '')
+                try:
+                    return json.loads(fixed_text)
+                except:
+                    raise e
+
     async def process_news_batch(
         self, news_list: List[Dict[str, str]], temperature: float | None = None
     ) -> Tuple[str, Any, Optional[str]]:
@@ -85,7 +105,7 @@ class EditorAgent:
                 news_input=news_input,
             )
             
-            llm_options: dict = {"num_predict": 2048}
+            llm_options: dict = {"num_predict": 4096}
             if temperature is not None:
                 llm_options["temperature"] = temperature
             
@@ -100,7 +120,7 @@ class EditorAgent:
             raw_content = response['response'].strip()
             logger.debug(f"LLM JSON: {raw_content}")
             
-            data = json.loads(raw_content)
+            data = self._safe_json_loads(raw_content)
             
             # Извлечение данных
             idx_val = data.get("selected_index") or data.get("selected_news_index", 1)
