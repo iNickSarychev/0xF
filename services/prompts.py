@@ -4,27 +4,26 @@ import random
 # ─── Dynamic post structures for randomization ──────────────────────────────
 # Points 1 (Headline) and 2 (TL;DR) are fixed across all variants!
 POST_STRUCTURES = [
-    # Variant 1: Classic analysis (Default)
-    """1. Headline: Always make a <b>bold headline</b> on the very first line.
-2. First paragraph: Get straight to the point — what happened (TL;DR).
-3. Details: 2-3 key facts in order (use bullet lists with "–" for readability).
-4. Why it matters (So What?): How this news affects the industry or developers. No generic statements, only concrete impact.
-5. Practical use case: A short example of how to apply this technology right now (especially in the context of rapid development or automation).
-6. Closing line: One sentence with a touch of geeky humor or an open question for the audience.""",
+    # Variant 1: Technical Breakdown (Deep Dive)
+    """1. Headline: <b>Bold, punchy headline</b>. 
+2. TL;DR: One sentence about what happened.
+3. How it works: Technical explanation. What's the architecture? What algorithm is used? Why is it better than previous methods? (Mandatory!)
+4. Practical context: Where to apply this tool/method today.
+5. Bottom line: Concrete impact on engineering/development.""",
 
-    # Variant 2: Tool review / Model release
-    """1. Headline: Always make a <b>bold headline</b> on the very first line.
-2. First paragraph: Get straight to the point — what happened (TL;DR).
-3. Killer features: A list of 2-3 main capabilities that set this apart from competitors.
-4. Catch (Limitations): What the tool can't do yet or what its biggest drawback is.
-5. Verdict: Is it worth trying right now or better to wait (keep it brief).""",
+    # Variant 2: Tool/Model Launch
+    """1. Headline: <b>Bold name of the tool/model</b>.
+2. TL;DR: What task does it solve?
+3. Architecture & Logic: Explain the implementation details. How did they achieve these results? (Mandatory!)
+4. Key numbers: Benchmarks, speed, context window size, or price.
+5. Verdict: Why a developer should care.""",
 
-    # Variant 3: Paradigm shift (Business, trends, regulations)
-    """1. Headline: Always make a <b>bold headline</b> on the very first line.
-2. First paragraph: Get straight to the point — what happened (TL;DR).
-3. Context: Briefly describe the problem or market situation BEFORE this news.
-4. Winners and losers: Who benefits from this event and whose business is threatened (use lists).
-5. Bottom line: A short summary with a touch of irony about the tech bubble.""",
+    # Variant 3: Comparative Analysis
+    """1. Headline: <b>Bold comparison/trend headline</b>.
+2. TL;DR: The essence of the change.
+3. Mechanics of Change: How exactly does this new approach work differently? Detail the process. (Mandatory!)
+4. Winners/Losers: Who gains and who loses from this tech shift.
+5. Geeky takeaway: One final technical thought.""",
 ]
 
 
@@ -47,19 +46,22 @@ The reader should never have to re-read a sentence.
 STRUCTURE (MANDATORY):
 {structure_block}
 
-CLARITY RULES:
-- NEVER write section labels (TL;DR, Context, Verdict, Why it matters, Closing, Practical use case, Killer features, Catch, Winners and losers) in the final text. Write the substance of each paragraph directly.
-- One sentence = one idea
-- Don't jump between ideas
-- Avoid abstractions ("trust", "future", "revolution")
-- Explain in simple words, like talking to a friend
-- If a sentence can be simplified — simplify it
+TECHNICAL DEPTH (Hard Constraint):
+- No "water", no fluff, no "futurism". 
+- Focus only on: How is this trained? What's the architecture? What are the specific metrics?
+- If the news mentions a model, describe its parameters or training data specifics.
+- BE CONCRETE. Instead of "it is fast", write "latency reduced by 25% due to KV-cache optimization".
+
+FORMATTING RULES:
+- The FIRST LINE must be a <b>Bold Headline</b>. No text should precede the headline.
+- Paragraphs must be short (3-4 lines max).
+- Use technical terminology correctly (LLM, RAG, LoRA, Quantization, etc.).
+- The news and its INTERNAL MECHANISM is your priority. 
 
 STYLE:
-- Conversational but not pretentious
-- No philosophy or "deep conclusions"
-- No dramatization
-- Short sentences are fine
+- Professional, engineering-focused tone.
+- Avoid excitement ("Amazing!", "Revolution!"). Use dry, factual analysis.
+- The reader is a senior developer or AI researcher. don't over-explain basics, explain the innovation.
 
 ANTI-AI:
 - Don't write like an article
@@ -118,9 +120,10 @@ WHAT TO CHECK:
    — Sentences that can be removed without losing meaning
 
 4. STRUCTURE & SUBSTANCE (Critical):
-   — Is there a bold headline on the first line <b>...</b>? (Mandatory!)
-   — Does the first paragraph answer "what exactly happened?" (If it's too vague like "Let's talk about AI", reduce score by 4).
-   — CONCRETE FACTS: Does the text contain at least 2-3 specific entities? (Numbers, company names, specific model names, dates). If the text is purely theoretical/vague — REJECT IT (is_approved = false).
+   — Is there a <b>Bold Headline</b> on the first line? If not, REJECT (is_approved = false).
+   — TECHNICAL DEPTH: Does the text explain THE MECHANISM (how it works)? (e.g., algorithms, training methods, specific technical steps). If it's just general news without "under the hood" details — REJECT (is_approved = false).
+   — Does the first paragraph answer "what exactly happened?" (If it's too vague, reduce score by 5).
+   — CONCRETE FACTS: Numbers, specific names, metrics. 
 
 RESPONSE RULES:
 - score from 1 to 10 (10 = perfect post)
