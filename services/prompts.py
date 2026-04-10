@@ -75,7 +75,7 @@ ANTI-HALLUCINATION (CRITICAL):
 - If the news text does not contain technical details, state the goal of the study/tool without inventing how it works.
 
 FORMATTING:
-- 300–1000 characters
+- 500–1200 characters (Do not make it too short! Expand on interesting details)
 - <b>Bold</b> only for headline, names, and numbers
 - Use "–" for lists if needed
 - No emojis and no hashtags
@@ -127,14 +127,15 @@ WHAT TO CHECK:
 
 4. STRUCTURE & SUBSTANCE (Critical):
    — Is there a <b>Bold Headline</b> on the first line? If not, REJECT (is_approved = false).
-   — TECHNICAL DEPTH: Does the text explain THE MECHANISM (how it works)? (e.g., algorithms, training methods, specific technical steps). If it's just general news without "under the hood" details — REJECT (is_approved = false).
+   — SUBSTANCE OVER DELETION: Do not blindly command to "delete the paragraph". If a paragraph lacks facts, demand to EXPAND it with concrete facts, metrics, or technical details from the source. We want rich, informative posts (up to 1200 chars), not extremely short summaries.
+   — TECHNICAL & FACTUAL DEPTH: If the news is about a model/algorithm, demand the mechanism. If it's a product/business news, demand specific metrics, features, or context. 
    — Does the first paragraph answer "what exactly happened?" (If it's too vague, reduce score by 5).
    — CONCRETE FACTS: Numbers, specific names, metrics. 
 
 RESPONSE RULES:
 - score from 1 to 10 (10 = perfect post)
 - is_approved = true ONLY if score >= 8 AND there are concrete facts.
-- feedback — strictly specific corrections, no praise. If the text is "watery", demand specific facts from the source.
+- feedback — strictly specific corrections, no praise. Do not just say "delete this"; instead say "expand this with concrete metrics from the source". We want the text to remain informative and long enough.
 - If the text is good — write "Text approved" in feedback
 
 RESPOND STRICTLY IN JSON FORMAT:
