@@ -18,6 +18,21 @@ class Database:
                     sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            try:
+                conn.execute("ALTER TABLE sent_news ADD COLUMN source_url TEXT")
+            except sqlite3.OperationalError:
+                pass  # Столбец уже существует
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS pending_posts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    text TEXT NOT NULL,
+                    image_url TEXT,
+                    source_url TEXT,
+                    image_query TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS subscribers (
                     chat_id INTEGER PRIMARY KEY
@@ -90,7 +105,7 @@ class Database:
         """Сохраняет новость в базу после отправки."""
         news_hash = self._generate_hash(title, link)
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("INSERT OR IGNORE INTO sent_news (news_hash, title) VALUES (?, ?)", (news_hash, title))
+            conn.execute("INSERT OR IGNORE INTO sent_news (news_hash, title, source_url) VALUES (?, ?, ?)", (news_hash, title, link))
             conn.commit()
 
     def add_subscriber(self, chat_id: int):
@@ -152,23 +167,35 @@ class Database:
             return cursor.rowcount > 0
 
     # Группа методов для ожидающих публикации постов (Persistence)
-    def save_pending_post(self, message_id: int, data: dict, publish_at: str):
-        import json
+    def add_pending_post(self, text: str, image_url: str = None, source_url: str = None, image_query: str = None) -> int:
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute(
-                "INSERT OR REPLACE INTO pending_posts (message_id, data_json, publish_at) VALUES (?, ?, ?)",
-                (message_id, json.dumps(data), publish_at)
+            cursor = conn.execute(
+                "INSERT INTO pending_posts (text, image_url, source_url, image_query) VALUES (?, ?, ?, ?)",
+                (text, image_url, source_url, image_query)
             )
             conn.commit()
+            return cursor.lastrowid
 
-    def get_all_pending_posts(self) -> list[tuple[int, dict, str]]:
-        import json
+    def get_pending_post(self, post_id: int) -> dict | None:
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute("SELECT message_id, data_json, publish_at FROM pending_posts")
-            results = []
-            for row in cursor.fetchall():
-                results.append((row[0], json.loads(row[1]), row[2]))
-            return results
+            cursor = conn.execute(
+                "SELECT text, image_url, source_url, image_query FROM pending_posts WHERE id = ?",
+                (post_id,)
+            )
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "text": row[0],
+                    "image_url": row[1],
+                    "source_url": row[2],
+                    "image_query": row[3]
+                }
+            return None
+
+    def remove_pending_post(self, post_id: int):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("DELETE FROM pending_posts WHERE id = ?", (post_id,))
+            conn.commit()
 
     def remove_pending_post(self, message_id: int):
         with sqlite3.connect(self.db_path) as conn:

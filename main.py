@@ -166,24 +166,27 @@ async def auto_publish(message_id: int) -> None:
 
 
 # ─── Утилиты подготовки публикации ───────────────────────────────────────────
-def _build_moderation_keyboard() -> InlineKeyboardMarkup:
-    """Строит клавиатуру модерации с кнопкой перегенерации."""
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✅ Опубликовать", callback_data="approve"),
-                InlineKeyboardButton(text="❌ Отклонить", callback_data="reject"),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔄 Перегенерировать", callback_data="regenerate"
-                ),
-                InlineKeyboardButton(
-                    text="🎓 Отклонить (Обучить)", callback_data="reject_teach"
-                ),
-            ],
+def _build_moderation_keyboard(source_url: str | None = None) -> InlineKeyboardMarkup:
+    """Строит клавиатуру модерации с кнопкой перегенерации и источником."""
+    buttons = [
+        [
+            InlineKeyboardButton(text="✅ Опубликовать", callback_data="approve"),
+            InlineKeyboardButton(text="❌ Отклонить", callback_data="reject"),
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔄 Перегенерировать", callback_data="regenerate"
+            ),
+            InlineKeyboardButton(
+                text="🎓 Обучить", callback_data="reject_teach"
+            ),
         ]
-    )
+    ]
+    
+    if source_url:
+        buttons.append([InlineKeyboardButton(text="🔗 Читать оригинал", url=source_url)])
+        
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def _truncate_article(article_text: str) -> str:
@@ -350,7 +353,7 @@ async def generate_and_moderate() -> None:
             db.save_sent_vector(news_item["title"], news_item["vector"])
 
         final_text = _truncate_article(article_text) + "\n\n<b>@AxFUTURE</b>"
-        keyboard = _build_moderation_keyboard()
+        keyboard = _build_moderation_keyboard(source_link)
         publish_time = datetime.now(msk_tz) + timedelta(minutes=10)
 
         pending_data = {
@@ -457,7 +460,8 @@ async def on_regenerate(callback: types.CallbackQuery) -> None:
         news_item["image"] = valid_image
 
         final_text = _truncate_article(article_text) + "\n\n<b>@AxFUTURE</b>"
-        keyboard = _build_moderation_keyboard()
+        source_link = news_item.get("link", "")
+        keyboard = _build_moderation_keyboard(source_link)
         publish_time = datetime.now(msk_tz) + timedelta(minutes=10)
 
         new_pending = {
@@ -675,8 +679,9 @@ async def cmd_news(message: types.Message) -> None:
         valid_image = await _find_valid_image(news_item, image_query)
         news_item["image"] = valid_image
 
+        source_link = news_item.get("link")
         final_text = _truncate_article(article_text) + "\n\n<b>@AxFUTURE</b>"
-        keyboard = _build_moderation_keyboard()
+        keyboard = _build_moderation_keyboard(source_url=source_link)
 
         try:
             if valid_image:
