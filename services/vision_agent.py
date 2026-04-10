@@ -42,7 +42,7 @@ class VisionAgent:
         try:
             async with aiohttp.ClientSession() as session:
                 payload = {"url": url}
-                async with session.post(self.media_x_url, json=payload, timeout=15) as resp:
+                async with session.post(self.media_x_url, json=payload, timeout=20) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         if data.get("status") == "success":
