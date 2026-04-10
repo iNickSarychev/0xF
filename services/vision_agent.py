@@ -1,4 +1,3 @@
-import ollama
 import httpx
 import base64
 import logging

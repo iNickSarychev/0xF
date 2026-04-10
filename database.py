@@ -1,6 +1,9 @@
+import json
 import sqlite3
 import hashlib
 import logging
+import time
+from functools import lru_cache
 from config import config
 
 logger = logging.getLogger(__name__)
@@ -139,29 +142,28 @@ class Database:
         return hashlib.md5(f"{title}{link}".encode()).hexdigest()
 
     def save_rejected_vector(self, text_preview: str, vector: list[float]):
-        import json
         vector_json = json.dumps(vector)
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("INSERT INTO rejected_vectors (text_preview, vector_json) VALUES (?, ?)", (text_preview, vector_json))
             conn.commit()
+        self.get_all_rejected_vectors.cache_clear()
 
+    @lru_cache(maxsize=1)
     def get_all_rejected_vectors(self) -> list[tuple[str, list[float]]]:
-        import json
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("SELECT text_preview, vector_json FROM rejected_vectors")
             return [(row[0], json.loads(row[1])) for row in cursor.fetchall()]
 
     def save_sent_vector(self, text_preview: str, vector: list[float]):
-        import json
         vector_json = json.dumps(vector)
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("INSERT INTO sent_vectors (text_preview, vector_json) VALUES (?, ?)", (text_preview, vector_json))
-            # Удаляем старые векторы (старше 7 дней), чтобы база не пухла
             conn.execute("DELETE FROM sent_vectors WHERE sent_at < datetime('now', '-7 days')")
             conn.commit()
+        self.get_all_sent_vectors.cache_clear()
 
+    @lru_cache(maxsize=1)
     def get_all_sent_vectors(self) -> list[tuple[str, list[float]]]:
-        import json
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("SELECT text_preview, vector_json FROM sent_vectors WHERE sent_at >= datetime('now', '-7 days')")
             return [(row[0], json.loads(row[1])) for row in cursor.fetchall()]
@@ -191,7 +193,7 @@ class Database:
             conn.commit()
             return cursor.lastrowid
 
-    def get_pending_post(self, post_id: int) -> dict | None:
+    def get_pending_post_by_id(self, post_id: int) -> dict | None:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
                 "SELECT text, image_url, source_url, image_query FROM pending_posts WHERE id = ?",
@@ -215,8 +217,7 @@ class Database:
                          (message_id, data_json, publish_at))
             conn.commit()
 
-    def get_pending_post(self, message_id: int) -> dict | None:
-        import json
+    def get_scheduled_post_by_message_id(self, message_id: int) -> dict | None:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("SELECT data_json FROM scheduled_posts WHERE message_id = ?", (message_id,))
             row = cursor.fetchone()

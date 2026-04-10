@@ -1,8 +1,8 @@
 import logging
+import time
+import calendar
 from typing import List, Dict
 from config import config
-from services.llm_gateway import llm_gateway
-from services.text_processor import text_processor
 
 logger = logging.getLogger(__name__)
 
@@ -10,47 +10,53 @@ class SelectorAgent:
     def __init__(self, model: str = config.OLLAMA_MODEL):
         self.model = model
 
-    async def select_best_news(self, news_list: List[Dict[str, str]], theme: str) -> int:
-        """По очереди оценивает каждую новость и выбирает лучшую."""
-        if not news_list or len(news_list) <= 1:
+    async def select_best_news(self, news_list: List[Dict], theme: str) -> int:
+        """
+        Эвристический отбор лучшей новости БЕЗ использования LLM.
+        Формула: trending_score * 2.0 + свежесть * 1.5 + (длина описания / 500)
+        """
+        if not news_list:
+            return 0
+        if len(news_list) == 1:
             return 0
 
-        processing_list = news_list[:10]
-        best_score, best_index = -1, 0
-        from services.prompts import SCORING_PROMPT
+        current_time = time.time()
+        best_score = -1.0
+        best_index = 0
 
-        logger.info(f"Starting one-by-one scoring for {len(processing_list)} items...")
+        logger.info(f"Starting heuristic scoring for {len(news_list)} news items...")
 
-        for i, news in enumerate(processing_list):
+        for i, news in enumerate(news_list):
             try:
-                trending_mark = " [TRENDING]" if news.get('trending') else ""
-                summary = news.get('summary', '')[:500]
-                news_content = f"TITLE: {news['title']}{trending_mark}\nSUMMARY: {summary}"
-                
-                prompt = SCORING_PROMPT.format(theme=theme, news_content=news_content)
-                response = await llm_gateway.generate(
-                    model=self.model,
-                    prompt=prompt,
-                    format="json"
-                )
-                
-                data = text_processor.safe_json_loads(response['response'])
-                score = int(data.get("score", 0))
-                reason = data.get("reason", "No reason")
-                
-                logger.info(f"News [{i+1}/{len(processing_list)}] Score: {score}/10 | {news['title'][:50]}... | Reason: {reason}")
+                # 1. Свежесть (от 0 до 1, где 1 - только что опубликовано, 0 - старше 24 часов)
+                pub_parsed = news.get("published")
+                if pub_parsed:
+                    pub_epoch = calendar.timegm(pub_parsed)
+                    hours_old = (current_time - pub_epoch) / 3600
+                    freshness = max(0.0, 1.0 - (hours_old / 24.0))
+                else:
+                    freshness = 0.5
+
+                # 2. Trending Score (из fetcher)
+                trending_val = float(news.get("trending_score", 0))
+
+                # 3. Бонус за детальность (summary length)
+                summary_bonus = len(news.get("summary", "")) / 500.0
+
+                # Итоговая формула
+                score = (trending_val * 2.0) + (freshness * 1.5) + summary_bonus
+
+                logger.debug(f"News [{i}] Score: {score:.2f} | Trending: {trending_val} | Fresh: {freshness:.2f} | Title: {news['title'][:50]}...")
 
                 if score > best_score:
-                    best_score, best_index = score, i
-                
-                if score >= 10:
-                    logger.info("Found perfect 10/10 news. Stopping.")
-                    break
+                    best_score = score
+                    best_index = i
+
             except Exception as e:
-                logger.error(f"Error scoring news item {i}: {e}")
+                logger.error(f"Error heuristic scoring news item {i}: {e}")
                 continue
 
-        logger.info(f"SelectorAgent finalized choice: Index {best_index} with Score {best_score}")
+        logger.info(f"Heuristic selector finalized: Index {best_index} with Score {best_score:.2f}")
         return best_index
 
 selector_agent = SelectorAgent()

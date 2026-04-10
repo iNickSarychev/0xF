@@ -1,20 +1,15 @@
-import ollama
-import httpx
 import numpy as np
 import asyncio
 import logging
-from typing import List, Dict, Optional
-from config import config
+from typing import List, Dict
+from services.llm_gateway import llm_gateway
 
 logger = logging.getLogger(__name__)
 
 class VectorService:
     def __init__(self):
-        self.client = ollama.AsyncClient(
-            host=config.OLLAMA_BASE_URL,
-            timeout=httpx.Timeout(300.0, connect=10.0)
-        )
-        self.semaphore = asyncio.Semaphore(5)  # Ограничиваем параллелизм, чтобы не перегрузить Ollama
+        # Ограничиваем параллелизм до 3, чтобы не перегружать Ollama
+        self.semaphore = asyncio.Semaphore(3)
 
     async def get_embeddings_batch(self, news_list: List[Dict[str, str]]) -> List[Dict[str, str]]:
         """Получает эмбеддинги для списка новостей параллельно."""
@@ -22,12 +17,12 @@ class VectorService:
         return await asyncio.gather(*tasks)
 
     async def _get_single_embedding(self, news: Dict[str, str]) -> Dict[str, str]:
-        """Получает эмбеддинг для одной новости."""
+        """Получает эмбеддинг для одной новости через LLMGateway."""
         async with self.semaphore:
             summary_trunc = (news['summary'][:500] + '...') if len(news['summary']) > 500 else news['summary']
             text_for_emb = f"{news['title']}. {summary_trunc}"
             try:
-                resp = await self.client.embeddings(
+                resp = await llm_gateway.embeddings(
                     model='nomic-embed-text', 
                     prompt=text_for_emb
                 )
@@ -51,7 +46,7 @@ class VectorService:
 
     async def is_available(self) -> bool:
         try:
-            await self.client.list()
+            await llm_gateway.client.list()
             return True
         except Exception:
             return False

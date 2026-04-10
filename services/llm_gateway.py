@@ -105,4 +105,15 @@ class LLMGateway:
                 logger.error(f"LLMGateway Chat Error: {e}")
                 raise
 
+    async def embeddings(self, model: str, prompt: str) -> Dict[str, Any]:
+        """
+        Выполняет запрос эмбеддингов к Ollama (без семафора _semaphore, 
+        так как это быстрая операция и мы хотим параллелизма в VectorService).
+        """
+        try:
+            return await self.client.embeddings(model=model, prompt=prompt)
+        except Exception as e:
+            logger.error(f"LLMGateway Embeddings Error: {e}")
+            raise
+
 llm_gateway = LLMGateway()

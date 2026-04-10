@@ -7,6 +7,7 @@ load_dotenv()
 class Config:
     BOT_TOKEN = os.getenv("BOT_TOKEN")
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:26b")
+    OLLAMA_CRITIC_MODEL = os.getenv("OLLAMA_CRITIC_MODEL", OLLAMA_MODEL) # По умолчанию та же, что и основная
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "1m")
     DB_PATH = os.getenv("DB_PATH", "news.db")

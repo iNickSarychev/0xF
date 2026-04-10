@@ -147,7 +147,7 @@ async def publish_to_channel(article_text: str, image_url: str = None) -> None:
 # ─── Автопубликация по таймеру ────────────────────────────────────────────────
 async def auto_publish(message_id: int) -> None:
     """Автопубликует статью, если админ не ответил за отведённое время."""
-    pending_data = db.get_pending_post(message_id)
+    pending_data = db.get_scheduled_post_by_message_id(message_id)
     if not pending_data:
         return
 
@@ -434,13 +434,14 @@ async def generate_and_moderate() -> None:
 async def on_approve(callback: types.CallbackQuery) -> None:
     """Админ одобрил — публикуем на канале."""
     message_id = callback.message.message_id
-    pending_data = db.get_pending_post(message_id)
+    pending_data = db.get_scheduled_post_by_message_id(message_id)
 
     if not pending_data:
         await callback.answer("Эта статья уже обработана или не найдена.", show_alert=True)
         return
 
     await publish_to_channel(pending_data["text"], pending_data.get("image"))
+    _reset_llm_failure_streak()
 
     try:
         scheduler.remove_job(f"publish_{message_id}")
@@ -471,7 +472,7 @@ async def on_reject(callback: types.CallbackQuery) -> None:
 async def on_regenerate(callback: types.CallbackQuery) -> None:
     """Перегенерирует пост по той же выборке новостей с повышенной температурой."""
     message_id = callback.message.message_id
-    pending_data = db.get_pending_post(message_id)
+    pending_data = db.get_scheduled_post_by_message_id(message_id)
 
     if not pending_data:
         await callback.answer("Данные от предыдущей генерации не найдены.", show_alert=True)
@@ -544,7 +545,7 @@ async def on_regenerate(callback: types.CallbackQuery) -> None:
 async def on_reject_teach(callback: types.CallbackQuery, state: FSMContext) -> None:
     """Запускает FSM-диалог: спрашивает причину отклонения."""
     message_id = callback.message.message_id
-    pending_data = db.get_pending_post(message_id)
+    pending_data = db.get_scheduled_post_by_message_id(message_id)
 
     if not pending_data:
         await callback.answer("Эта статья уже обработана.", show_alert=True)
@@ -569,7 +570,7 @@ async def on_reject_teach_reason(message: types.Message, state: FSMContext) -> N
     """Получает причину отклонения и сохраняет обучающий вектор."""
     data = await state.get_data()
     pending_message_id: int = data["pending_message_id"]
-    pending_data = db.get_pending_post(pending_message_id)
+    pending_data = db.get_scheduled_post_by_message_id(pending_message_id)
 
     reason = (
         message.text.strip()

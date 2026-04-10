@@ -25,7 +25,7 @@ class CritiqueResult:
 class CriticAgent:
     """Оценивает черновик и запускает цикл переработки."""
 
-    def __init__(self, model: str = config.OLLAMA_MODEL) -> None:
+    def __init__(self, model: str = config.OLLAMA_CRITIC_MODEL) -> None:
         self.model = model
 
     async def critique(self, draft_text: str) -> CritiqueResult:
@@ -61,8 +61,8 @@ class CriticAgent:
             logger.warning(f"Rewrite error: {exc}")
             return draft_text
 
-    async def run_reflection_loop(self, initial_draft: str, news_input: str, max_iterations: int = 3) -> tuple[str, CritiqueResult]:
-        """Цикл «Черновик → Критик → Переработка»."""
+    async def run_reflection_loop(self, initial_draft: str, news_input: str, max_iterations: int = 1) -> tuple[str, CritiqueResult]:
+        """Цикл «Черновик → Критик → Переработка» (оптимизированный)."""
         current_draft, previous_score, stall_counter = initial_draft, -1, 0
         last_critique = CritiqueResult(0, False, False, "")
 

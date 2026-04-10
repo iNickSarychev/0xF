@@ -117,7 +117,7 @@ class EditorAgent:
             article_text, critique = await critic_agent.run_reflection_loop(
                 initial_draft=article_text,
                 news_input=news_input,
-                max_iterations=3,
+                max_iterations=1,
             )
             logger.info(
                 f"Final critic score: {critique.score}/10 | "
