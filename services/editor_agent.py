@@ -111,18 +111,13 @@ class EditorAgent:
         )
         logger.debug(f"EDITOR_INPUT_NEWS:\n{news_input}")
 
-        # 5. Выбор Golden Samples (2 случайных примера)
-        samples = random.sample(GOLDEN_SAMPLES, 1)
-        samples_text = "\n\n---\n\n".join(samples)
-
-        # 6. Генерация
+        # 5. Генерация (Zero-shot режим, без GOLDEN_SAMPLES)
         try:
             chosen_structure = get_random_structure()
             logger.info(f"Post structure: {chosen_structure[:60]}...")
             prompt = EDITOR_PROMPT.format(
                 structure_block=chosen_structure,
-                news_input=news_input,
-                golden_samples=samples_text
+                news_input=news_input
             )
             
             llm_options: dict = {
