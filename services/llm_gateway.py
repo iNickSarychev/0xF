@@ -44,9 +44,10 @@ class LLMGateway:
         """
         # Базовые опции стабильности
         base_options = {
-            "num_ctx": 8192,
+            "num_ctx": 6144,
             "temperature": 0.7,
-            "num_thread": 4, 
+            "num_thread": 2, 
+            "low_vram": True,
         }
         if options:
             base_options.update(options)
@@ -79,8 +80,9 @@ class LLMGateway:
         Выполняет chat-запрос к Ollama через семафор.
         """
         base_options = {
-            "num_ctx": 8192,
-            "num_thread": 4,
+            "num_ctx": 6144,
+            "num_thread": 2,
+            "low_vram": True,
         }
         if options:
             base_options.update(options)

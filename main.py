@@ -59,7 +59,12 @@ bot = Bot(
     default=DefaultBotProperties(parse_mode="HTML"),
 )
 dp = Dispatcher(storage=MemoryStorage())
+# Москва для таймеров
 msk_tz = pytz.timezone("Europe/Moscow")
+
+# Глобальный замок для предотвращения параллельных запусков генерации
+# (защита Ollama от перегрузки)
+generation_lock = asyncio.Lock()
 scheduler = AsyncIOScheduler(timezone=msk_tz)
 
 # Счётчик подряд идущих сбоев LLM для алертов
@@ -333,6 +338,10 @@ async def _schedule_pending_post(
         run_date=publish_time,
         args=[sent_msg.message_id],
         id=f"publish_{sent_msg.message_id}",
+        replace_existing=True,
+        coalesce=True,
+        misfire_grace_time=60,
+        max_instances=1,
     )
 
 
@@ -368,51 +377,56 @@ async def _run_generation_pipeline(
 
 async def generate_and_moderate() -> None:
     """Генерирует статью и отправляет её в чат админа на модерацию."""
-    try:
-        if not await editor_agent.is_available():
-            logger.warning("Ollama is offline. Skipping.")
-            return
+    if generation_lock.locked():
+        logger.warning("Generation already in progress. Skipping.")
+        return
 
-        news_list = await news_fetcher.get_news_batch(max_count=30)
-        if not news_list:
-            logger.info("No fresh news. Skipping.")
-            return
+    async with generation_lock:
+        try:
+            if not await editor_agent.is_available():
+                logger.warning("Ollama is offline. Skipping.")
+                return
 
-        article_text, news_item, image_query = await _run_generation_pipeline(news_list)
-        if not news_item:
-            return
+            news_list = await news_fetcher.get_news_batch(max_count=30)
+            if not news_list:
+                logger.info("No fresh news. Skipping.")
+                return
 
-        valid_image = await _find_valid_image(news_item, image_query)
-        news_item["image"] = valid_image
+            article_text, news_item, image_query = await _run_generation_pipeline(news_list)
+            if not news_item:
+                return
 
-        source_link = news_item.get("link", "")
-        db.save_news(news_item["title"], source_link)
-        if "vector" in news_item:
-            db.save_sent_vector(news_item["title"], news_item["vector"])
+            valid_image = await _find_valid_image(news_item, image_query)
+            news_item["image"] = valid_image
 
-        final_text = _truncate_article(article_text) + "\n\n<b>@AxFUTURE</b>"
-        keyboard = _build_moderation_keyboard(source_link)
-        publish_time = datetime.now(msk_tz) + timedelta(minutes=10)
+            source_link = news_item.get("link", "")
+            db.save_news(news_item["title"], source_link)
+            if "vector" in news_item:
+                db.save_sent_vector(news_item["title"], news_item["vector"])
 
-        pending_data = {
-            "text": final_text,
-            "image": news_item.get("image"),
-            "news_item": news_item,
-            "news_list": news_list,  # для перегенерации
-        }
+            final_text = _truncate_article(article_text) + "\n\n<b>@AxFUTURE</b>"
+            keyboard = _build_moderation_keyboard(source_link)
+            publish_time = datetime.now(msk_tz) + timedelta(minutes=10)
 
-        sent_msg = await _send_to_admin(
-            config.ADMIN_CHAT_ID,
-            final_text,
-            valid_image,
-            keyboard,
-            header="📝 <b>На модерацию (авто через 10 мин):</b>",
-        )
-        if sent_msg:
-            await _schedule_pending_post(sent_msg, pending_data, publish_time)
+            pending_data = {
+                "text": final_text,
+                "image": news_item.get("image"),
+                "news_item": news_item,
+                "news_list": news_list,  # для перегенерации
+            }
 
-    except Exception as exc:
-        logger.error(f"Scheduled generate_and_moderate error: {exc}")
+            sent_msg = await _send_to_admin(
+                config.ADMIN_CHAT_ID,
+                final_text,
+                valid_image,
+                keyboard,
+                header="📝 <b>На модерацию (авто через 10 мин):</b>",
+            )
+            if sent_msg:
+                await _schedule_pending_post(sent_msg, pending_data, publish_time)
+
+        except Exception as exc:
+            logger.error(f"Scheduled generate_and_moderate error: {exc}")
 
 
 # ─── Callback-обработчики модерации ───────────────────────────────────────────
@@ -710,68 +724,77 @@ async def cmd_news(message: types.Message) -> None:
         except Exception:
             pass
 
-        article_text, news_item, image_query = await _run_generation_pipeline(news_list)
-        if not news_item:
-            try:
-                await status_msg.edit_text(
-                    "🤷 Не нашлось значимых новостей, прошедших проверку качества."
-                )
-            except Exception:
-                pass
+        if generation_lock.locked():
+            await status_msg.edit_text("⏳ Другая задача уже выполняется. Пожалуйста, подождите.")
             return
 
-        source_link = news_item.get("link", "")
-        db.save_news(news_item["title"], source_link)
-        if "vector" in news_item:
-            db.save_sent_vector(news_item["title"], news_item["vector"])
-
-        try:
-            await status_msg.edit_text("🖼️ Ищу подходящее фото...")
-        except Exception as e:
-            if "message is not modified" not in str(e):
-                logger.error(f"Error updating status: {e}")
-                
-        valid_image = await _find_valid_image(news_item, image_query)
-        news_item["image"] = valid_image
-
-        source_link = news_item.get("link")
-        final_text = _truncate_article(article_text) + "\n\n<b>@AxFUTURE</b>"
-        keyboard = _build_moderation_keyboard(source_url=source_link)
-
-        try:
-            await status_msg.delete()
-            sent_msg = await _send_msg_with_photo_safer(
-                message.chat.id, final_text, valid_image, keyboard
-            )
-            status_msg_id = sent_msg.message_id
-        except Exception as exc:
-            logger.error(f"Error sending manual news: {exc}")
-            try:
-                sent_msg = await message.answer(
-                    f"⚠️ <b>Ошибка отправки фото, дубль текстом:</b>\n\n{final_text}", 
-                    reply_markup=keyboard
-                )
-                status_msg_id = sent_msg.message_id
-            except Exception as exc2:
-                logger.error(f"Critical HTML formatting error: {exc2}")
-                await message.answer("❌ Внутренняя ошибка форматирования поста.")
+        async with generation_lock:
+            article_text, news_item, image_query = await _run_generation_pipeline(news_list)
+            if not news_item:
+                try:
+                    await status_msg.edit_text(
+                        "🤷 Не нашлось значимых новостей, прошедших проверку качества."
+                    )
+                except Exception:
+                    pass
                 return
 
-        publish_time = datetime.now(msk_tz) + timedelta(minutes=10)
-        pending_data = {
-            "text": final_text,
-            "image": valid_image,
-            "news_item": news_item,
-            "news_list": news_list,
-        }
-        db.save_pending_post(status_msg_id, pending_data, publish_time.isoformat())
-        scheduler.add_job(
-            auto_publish,
-            trigger="date",
-            run_date=publish_time,
-            args=[status_msg_id],
-            id=f"publish_{status_msg_id}",
-        )
+            source_link = news_item.get("link", "")
+            db.save_news(news_item["title"], source_link)
+            if "vector" in news_item:
+                db.save_sent_vector(news_item["title"], news_item["vector"])
+
+            try:
+                await status_msg.edit_text("🖼️ Ищу подходящее фото...")
+            except Exception as e:
+                if "message is not modified" not in str(e):
+                    logger.error(f"Error updating status: {e}")
+                    
+            valid_image = await _find_valid_image(news_item, image_query)
+            news_item["image"] = valid_image
+
+            source_link = news_item.get("link")
+            final_text = _truncate_article(article_text) + "\n\n<b>@AxFUTURE</b>"
+            keyboard = _build_moderation_keyboard(source_url=source_link)
+
+            try:
+                await status_msg.delete()
+                sent_msg = await _send_msg_with_photo_safer(
+                    message.chat.id, final_text, valid_image, keyboard
+                )
+                status_msg_id = sent_msg.message_id
+            except Exception as exc:
+                logger.error(f"Error sending manual news: {exc}")
+                try:
+                    sent_msg = await message.answer(
+                        f"⚠️ <b>Ошибка отправки фото, дубль текстом:</b>\n\n{final_text}", 
+                        reply_markup=keyboard
+                    )
+                    status_msg_id = sent_msg.message_id
+                except Exception as exc2:
+                    logger.error(f"Critical HTML formatting error: {exc2}")
+                    await message.answer("❌ Внутренняя ошибка форматирования поста.")
+                    return
+
+            publish_time = datetime.now(msk_tz) + timedelta(minutes=10)
+            pending_data = {
+                "text": final_text,
+                "image": valid_image,
+                "news_item": news_item,
+                "news_list": news_list,
+            }
+            db.save_pending_post(status_msg_id, pending_data, publish_time.isoformat())
+            scheduler.add_job(
+                auto_publish,
+                trigger="date",
+                run_date=publish_time,
+                args=[status_msg_id],
+                id=f"publish_{status_msg_id}",
+                replace_existing=True,
+                coalesce=True,
+                misfire_grace_time=60,
+                max_instances=1,
+            )
 
     except Exception as exc:
         logger.error(f"Error processing /news: {exc}")
@@ -801,6 +824,8 @@ async def restore_pending_jobs() -> None:
                 id=f"publish_{message_id}",
                 replace_existing=True,
                 coalesce=True,
+                misfire_grace_time=60,
+                max_instances=1,
             )
             count += 1
     if count:
@@ -821,6 +846,8 @@ async def main() -> None:
         id="hourly_moderation",
         replace_existing=True,
         coalesce=True,
+        misfire_grace_time=300,
+        max_instances=1,
     )
     scheduler.start()
     logger.info("Scheduler: hourly 09:00–23:00 MSK → admin moderation.")
