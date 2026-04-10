@@ -67,7 +67,7 @@ class Database:
                 )
             """)
             conn.execute("""
-                CREATE TABLE IF NOT EXISTS pending_posts (
+                CREATE TABLE IF NOT EXISTS scheduled_posts (
                     message_id INTEGER PRIMARY KEY,
                     data_json TEXT NOT NULL,
                     publish_at TIMESTAMP NOT NULL,
@@ -192,22 +192,37 @@ class Database:
                 }
             return None
 
-    def remove_pending_post(self, post_id: int):
+    def save_pending_post(self, message_id: int, data: dict, publish_at: str):
+        import json
+        data_json = json.dumps(data)
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("DELETE FROM pending_posts WHERE id = ?", (post_id,))
-            conn.commit()
-
-    def remove_pending_post(self, message_id: int):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("DELETE FROM pending_posts WHERE message_id = ?", (message_id,))
+            conn.execute("INSERT OR REPLACE INTO scheduled_posts (message_id, data_json, publish_at) VALUES (?, ?, ?)",
+                         (message_id, data_json, publish_at))
             conn.commit()
 
     def get_pending_post(self, message_id: int) -> dict | None:
         import json
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute("SELECT data_json FROM pending_posts WHERE message_id = ?", (message_id,))
+            cursor = conn.execute("SELECT data_json FROM scheduled_posts WHERE message_id = ?", (message_id,))
             row = cursor.fetchone()
             return json.loads(row[0]) if row else None
+
+    def remove_pending_post(self, message_id: int):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("DELETE FROM scheduled_posts WHERE message_id = ?", (message_id,))
+            conn.commit()
+
+    def get_all_pending_posts(self) -> list[tuple[int, dict, str]]:
+        import json
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("SELECT message_id, data_json, publish_at FROM scheduled_posts")
+            results = []
+            for row in cursor.fetchall():
+                try:
+                    results.append((row[0], json.loads(row[1]), row[2]))
+                except:
+                    pass
+            return results
 
     def get_all_sources(self) -> list[tuple[int, str]]:
         with sqlite3.connect(self.db_path) as conn:
