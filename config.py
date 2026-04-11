@@ -48,8 +48,6 @@ class Config:
         "https://www.cnews.ru/inc/rss/news.xml",
         "https://www.computerra.ru/feed/",
         "https://www.securitylab.ru/_services/export/rss/news.php",
-        "https://arxiv.org/rss/cs.AI",
-        "https://dev.to/feed/tag/ai",
     ]
 
 config = Config()
