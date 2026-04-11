@@ -58,7 +58,7 @@ func FromMetadata(urlStr string) (*ExtractionResult, error) {
 		return nil, err
 	}
 
-	if og.Image == nil || len(og.Image) == 0 {
+	if len(og.Image) == 0 {
 		fmt.Printf("[DEBUG] OG: No images found in metadata (Title: %s)\n", og.Title)
 		return nil, fmt.Errorf("no open graph images found")
 	}
