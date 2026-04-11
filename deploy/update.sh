@@ -12,8 +12,8 @@ echo "📦 Обновление зависимостей..."
 source venv/bin/activate
 pip install -r requirements.txt
 
-echo "🚀 Запуск бота в фоновом режиме..."
-# Используем nohup, чтобы бот не выключился после закрытия терминала
-nohup python3 main.py > bot.log 2>&1 &
+echo "🚀 Перезапуск службы бота..."
+sudo systemctl restart 0xf-bot
 
-echo "✅ Бот запущен! Логи можно смотреть командой: tail -f bot.log"
+echo "✅ Код обновлен и служба 0xf-bot перезагружена!"
+echo "Логи теперь смотрим так: journalctl -u 0xf-bot -f"
