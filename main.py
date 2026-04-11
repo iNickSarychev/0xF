@@ -193,14 +193,17 @@ def _build_moderation_keyboard(source_url: str | None = None) -> InlineKeyboardM
 
 
 def _truncate_article(article_text: str) -> str:
-    """Умная обрезка: ищет последнюю точку перед лимитом Telegram."""
+    """Умная обрезка: ищет последнюю точку перед лимитом Telegram (1024 для фото)."""
     article_text = article_text.strip()
-    if len(article_text) <= 3700:
+    # Лимит Telegram 1024, оставляем запас для подписи канала 
+    limit = 1000 
+    
+    if len(article_text) <= limit:
         return article_text
 
-    truncated = article_text[:3700]
+    truncated = article_text[:limit]
     last_period = truncated.rfind(".")
-    if last_period > 3000:
+    if last_period > 800:
         return truncated[: last_period + 1]
     return truncated + "..."
 
@@ -249,40 +252,18 @@ async def _send_msg_with_photo_safer(
     if photo_bytes:
         photo_file = BufferedInputFile(photo_bytes, filename="image.jpg")
         
-        # Если текст помещается в подпись (1024 символа)
-        if len(text) <= 1024:
-            try:
-                return await bot.send_photo(
-                    chat_id,
-                    photo=photo_file,
-                    caption=text,
-                    reply_markup=reply_markup,
-                    request_timeout=60,
-                )
-            except Exception as exc:
-                logger.warning(f"send_photo (buffered) failed: {exc}")
-        else:
-            # Если текст слишком длинный — шлем ФОТО + ТЕКСТ отдельно
-            try:
-                # 1. Отправляем большое фото с коротким заголовком (первая строка текста)
-                first_line = text.split("\n")[0] if "\n" in text else "News"
-                await bot.send_photo(
-                    chat_id,
-                    photo=photo_file,
-                    caption=f"{first_line}\n\n<i>Полный текст ниже...</i>",
-                    request_timeout=60,
-                )
-                # 2. Отправляем основной текст следом
-                return await bot.send_message(
-                    chat_id,
-                    text,
-                    reply_markup=reply_markup,
-                    request_timeout=60
-                )
-            except Exception as exc:
-                logger.error(f"Failed to send split photo+text: {exc}")
+        try:
+            return await bot.send_photo(
+                chat_id,
+                photo=photo_file,
+                caption=text,
+                reply_markup=reply_markup,
+                request_timeout=60,
+            )
+        except Exception as exc:
+            logger.error(f"Failed to send buffered photo: {exc}")
 
-    # Fallback: если не скачалось или ошибка - шлем как раньше через ссылку
+    # Fallback: если не скачалось, шлем как ссылку
     return await bot.send_message(
         chat_id,
         text,
