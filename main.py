@@ -131,15 +131,21 @@ async def _register_llm_failure(reason: str) -> None:
 
 
 # ─── Публикация на канал ──────────────────────────────────────────────────────
-async def publish_to_channel(article_text: str, image_url: str = None) -> None:
-    """Публикует статью на канале с фото или текстом (умная обработка лимитов)."""
-    # Последний рубеж защиты: балансировка HTML и фильтр мусора
+async def publish_to_channel(article_text: str, image_url: str = None, source_url: str = None) -> None:
+    """Публикует статью на канале с фото и кнопкой источника."""
+    # Последний рубеж защиты
     article_text = text_processor.balance_html_tags(article_text)
     article_text = text_processor.hallucination_filter(article_text)
 
+    keyboard = None
+    if source_url:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔗 Читать оригинал", url=source_url)]
+        ])
+
     try:
-        await _send_msg_with_photo_safer(config.CHANNEL_ID, article_text, image_url)
-        logger.info("Article published to channel.")
+        await _send_msg_with_photo_safer(config.CHANNEL_ID, article_text, image_url, reply_markup=keyboard)
+        logger.info("Article published to channel with source link.")
     except Exception as exc:
         logger.error(f"Failed to publish to channel: {exc}")
 
@@ -151,7 +157,8 @@ async def auto_publish(message_id: int) -> None:
     if not pending_data:
         return
 
-    await publish_to_channel(pending_data["text"], pending_data.get("image"))
+    source_url = pending_data.get("news_item", {}).get("link")
+    await publish_to_channel(pending_data["text"], pending_data.get("image"), source_url=source_url)
     db.remove_pending_post(message_id)
 
     try:
@@ -423,7 +430,8 @@ async def on_approve(callback: types.CallbackQuery) -> None:
         await callback.answer("Эта статья уже обработана или не найдена.", show_alert=True)
         return
 
-    await publish_to_channel(pending_data["text"], pending_data.get("image"))
+    source_url = pending_data.get("news_item", {}).get("link")
+    await publish_to_channel(pending_data["text"], pending_data.get("image"), source_url=source_url)
     _reset_llm_failure_streak()
 
     try:
