@@ -1,3 +1,4 @@
+import random
 import logging
 import time
 import calendar
@@ -7,14 +8,16 @@ from config import config
 
 logger = logging.getLogger(__name__)
 
-# Список обязательных AI/tech ключевых слов (хотя бы одно должно быть в title или summary)
+# Список обязательных AI/tech/Space ключевых слов
 TECH_KEYWORDS = {
     'ai', 'llm', 'gpt', 'model', 'neural', 'deep', 'learning', 'machine',
     'algorithm', 'python', 'code', 'github', 'api', 'data', 'cloud',
     'quantum', 'chip', 'nvidia', 'openai', 'google', 'meta', 'microsoft',
     'apple', 'tesla', 'robot', 'automation', 'software', 'hardware',
     'security', 'cryptography', 'blockchain', 'cyber', 'framework',
-    'library', 'tool', 'research', 'paper', 'arxiv', 'breakthrough'
+    'library', 'tool', 'research', 'paper', 'arxiv', 'breakthrough',
+    'nasa', 'spacex', 'starship', 'satellite', 'falcon', 'musk', 'futurology', 
+    'discovery', 'space', 'orbit', 'mars', 'moon'
 }
 
 class SelectorAgent:
@@ -74,8 +77,9 @@ class SelectorAgent:
                 clean_summary = re.sub(r'<[^>]+>', '', news.get("summary", ""))
                 summary_bonus = min(len(clean_summary) / 500.0, 2.0)
 
-                # Итоговая формула
-                score = (trending_val * 2.0) + (freshness * 1.5) + summary_bonus
+                # Итоговая формула + небольшой рандом для разнообразия
+                jitter = random.uniform(-0.3, 0.3)
+                score = (trending_val * 2.0) + (freshness * 1.5) + summary_bonus + jitter
                 
                 scored_indices.append((i, score))
                 logger.debug(f"News [{i}] Score: {score:.2f} | Trending: {trending_val} | Fresh: {freshness:.2f} | Title: {news['title'][:50]}...")

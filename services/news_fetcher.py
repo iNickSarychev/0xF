@@ -16,11 +16,15 @@ logger = logging.getLogger(__name__)
 # Домены приоритетных источников (AI-лаборатории).
 # Новости с этих доменов получают бонус к trending_score.
 PRIORITY_DOMAINS: dict[str, int] = {
-    "huggingface.co": 2,
+    "huggingface.co": 3,
     "blog.google": 2,
     "openai.com": 3,
     "deepmind.google": 3,
     "ai.meta.com": 2,
+    "nasaspaceflight.com": 3,
+    "teslarati.com": 2,
+    "singularityhub.com": 2,
+    "spacex.com": 3,
 }
 
 # Стоп-слова для детекции трендов (EN + RU)
@@ -136,12 +140,24 @@ class NewsFetcher:
             )
             all_news.extend(valid_entries[:3])
 
+        # Группируем по доменам, чтобы обеспечить разнообразие
+        domain_counts = {}
+        diverse_news = []
+        for item in all_news:
+            domain = item["feed_url"].split("//")[-1].split("/")[0]
+            count = domain_counts.get(domain, 0)
+            if count < 2:  # Не более 2 новостей из одного источника в пачке
+                diverse_news.append(item)
+                domain_counts[domain] = count + 1
+        
+        all_news = diverse_news
+
         logger.info(
             f"Fetch completed. Total parsed: {stats['total']}, "
             f"Too old: {stats['too_old']}, "
             f"Already sent: {stats['already_sent']}, "
             f"Errors: {stats['errors']}, "
-            f"Fresh news found (after per-feed cap): {len(all_news)}"
+            f"Diverse news found: {len(all_news)}"
         )
 
         # Сортируем по дате: от новых к старым (глобальная сортировка перед трендами)
