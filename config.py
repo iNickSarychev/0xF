@@ -9,7 +9,7 @@ class Config:
     
     # Настройки нейросети (с дефолтными значениями, если в .env пусто)
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:e4b") # Основная модель
-    OLLAMA_CRITIC_MODEL = os.getenv("OLLAMA_CRITIC_MODEL", "gemma4:e4b") # Модель для критики
+    OLLAMA_CRITIC_MODEL = os.getenv("OLLAMA_CRITIC_MODEL", "phi3:mini") # Модель для критики
     OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "1m")
     
