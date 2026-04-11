@@ -20,6 +20,13 @@ TECH_KEYWORDS = {
     'discovery', 'space', 'orbit', 'mars', 'moon'
 }
 
+# Ключевые слова для детекции открытий и прорывов
+DISCOVERY_KEYWORDS = {
+    'discovery', 'found', 'scientists', 'researchers', 'experiment', 'study', 
+    'nature', 'science', 'breakthrough', 'uncovered', 'identified', 'evidence',
+    'открытие', 'ученые', 'исследование', 'обнаружено', 'прорыв', 'впервые'
+}
+
 class SelectorAgent:
     def __init__(self, model: str = config.OLLAMA_MODEL):
         self.model = model
@@ -77,9 +84,17 @@ class SelectorAgent:
                 clean_summary = re.sub(r'<[^>]+>', '', news.get("summary", ""))
                 summary_bonus = min(len(clean_summary) / 500.0, 2.0)
 
+                # 4. Бонус за научные открытия
+                discovery_bonus = 0.0
+                text_content = (news['title'] + " " + news.get("summary", "")).lower()
+                content_words = set(re.findall(r'\w+', text_content))
+                if any(kw in content_words for kw in DISCOVERY_KEYWORDS):
+                    discovery_bonus = 1.5
+                    logger.debug(f"News [{i}] discovery_bonus applied (+1.5)")
+
                 # Итоговая формула + небольшой рандом для разнообразия
                 jitter = random.uniform(-0.3, 0.3)
-                score = (trending_val * 2.0) + (freshness * 1.5) + summary_bonus + jitter
+                score = (trending_val * 2.0) + (freshness * 1.5) + summary_bonus + discovery_bonus + jitter
                 
                 scored_indices.append((i, score))
                 logger.debug(f"News [{i}] Score: {score:.2f} | Trending: {trending_val} | Fresh: {freshness:.2f} | Title: {news['title'][:50]}...")

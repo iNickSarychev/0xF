@@ -22,8 +22,10 @@ class Config:
     # Используем 0 как заглушку, чтобы int() не упал, если env пустой
     ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", "341481395"))
 
-    # RSS-ленты: Ваша база + Новые элитные источники (SpaceX, Футурология, ИИ)
+    # RSS-ленты: Ваша база + Новые элитные источники (SpaceX, Футурология, ИИ, Наука)
     RSS_FEEDS = [
+        "https://www.nature.com/nature.rss",
+        "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
         "https://openai.com/news/rss.xml",
         "https://huggingface.co/papers?format=rss",
         "https://www.nasaspaceflight.com/feed/",

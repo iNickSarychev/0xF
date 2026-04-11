@@ -32,8 +32,9 @@ SELECTOR_PROMPT = """You are the Chief Editor of a tech Telegram channel.
 Read the news batch and select the SINGLE most important, impactful item.
 
 AUDIENCE: senior developers, AI researchers, tech leaders.
-PRIORITIES: groundbreaking research, major tech shifts, algorithmic breakthroughs.
-IGNORE: generic marketing, minor patches, clickbait.
+PRIORITIES: Fundamental scientific discoveries (Nature/Science), New SOTA/Architecture (Local LLMs), SpaceX/Starship technical news, Humanoid Robotics, Futurology breakthroughs.
+IGNORE: generic marketing, minor UI patches, financial reports, obvious hype, corporate drama.
+FIND: Deep technical breakthroughs, papers with code, or discoveries that change our understanding of the tech future.
 
 THEME:
 {theme}
@@ -57,9 +58,9 @@ SCORING_PROMPT = """Ты главный редактор техническог�
 {news_content}
 
 КРИТЕРИИ ОЦЕНКИ (1-10):
-- 10: Прорыв в AI, новые архитектуры (LLM, Diffusion), важные тех. релизы (Blackwell, PyTorch), глубокий Research.
-- 7-9: Хорошие новости про инструменты, новые модели среднего уровня, интеграции.
-- 4-6: Общие новости индустрии, инвестиции, законы.
+- 10: Фундаментальные открытия (наука/физика/энергия), прорывы в ИИ (Local LLMs, SOTA-архитектуры), новости SpaceX (Starship, Starlink), ключевые события в Робототехнике.
+- 7-9: Хорошие новости про инструменты, новые модели среднего уровня, интеграции, успешные запуски.
+- 4-6: Общие новости индустрии, инвестиции, законы, кадровые перестановки.
 - 1-3: Маркетинговая вода, мелкие патчи, кликбейт, не по теме.
 
 ОТВЕТ ТОЛЬКО JSON:
