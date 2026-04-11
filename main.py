@@ -12,7 +12,7 @@ from aiogram.utils.markdown import hbold
 from aiogram.types import (
     ReplyKeyboardMarkup, KeyboardButton,
     InlineKeyboardMarkup, InlineKeyboardButton,
-    ForceReply, LinkPreviewOptions
+    ForceReply, LinkPreviewOptions, BufferedInputFile
 )
 from aiogram.client.default import DefaultBotProperties
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -235,29 +235,54 @@ async def _send_msg_with_photo_safer(
     reply_markup: InlineKeyboardMarkup | None = None
 ) -> types.Message:
     """
-    Умный отправитель: если текст > 1024 символов, использует LinkPreview для картинки.
-    Это обходит лимит Telegram на длину подписи к фото.
+    Улучшенный отправитель: скачивает фото на VDS и отправляет как файл.
+    Если текст > 1024, разбивает на Фото + Текст.
     """
     if not image_url:
         return await bot.send_message(
             chat_id, text, reply_markup=reply_markup, request_timeout=60
         )
 
-    if len(text) <= 1024:
-        try:
-            return await bot.send_photo(
-                chat_id,
-                photo=image_url,
-                caption=text,
-                reply_markup=reply_markup,
-                request_timeout=60,
-            )
-        except Exception as exc:
-            logger.warning(f"send_photo failed, falling back to message: {exc}")
-            # Если само фото не грузится (ссылка битая), падаем на текст с превью
-            pass
+    # Пытаемся скачать картинку
+    photo_bytes = await vision_agent.download_image(image_url)
+    
+    if photo_bytes:
+        photo_file = BufferedInputFile(photo_bytes, filename="image.jpg")
+        
+        # Если текст помещается в подпись (1024 символа)
+        if len(text) <= 1024:
+            try:
+                return await bot.send_photo(
+                    chat_id,
+                    photo=photo_file,
+                    caption=text,
+                    reply_markup=reply_markup,
+                    request_timeout=60,
+                )
+            except Exception as exc:
+                logger.warning(f"send_photo (buffered) failed: {exc}")
+        else:
+            # Если текст слишком длинный — шлем ФОТО + ТЕКСТ отдельно
+            try:
+                # 1. Отправляем большое фото с коротким заголовком (первая строка текста)
+                first_line = text.split("\n")[0] if "\n" in text else "News"
+                await bot.send_photo(
+                    chat_id,
+                    photo=photo_file,
+                    caption=f"{first_line}\n\n<i>Полный текст ниже...</i>",
+                    request_timeout=60,
+                )
+                # 2. Отправляем основной текст следом
+                return await bot.send_message(
+                    chat_id,
+                    text,
+                    reply_markup=reply_markup,
+                    request_timeout=60
+                )
+            except Exception as exc:
+                logger.error(f"Failed to send split photo+text: {exc}")
 
-    # Для длинных текстов или при сбое send_photo
+    # Fallback: если не скачалось или ошибка - шлем как раньше через ссылку
     return await bot.send_message(
         chat_id,
         text,
